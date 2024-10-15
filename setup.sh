@@ -1,12 +1,12 @@
 #!/usr/bin/bash
 
-# Set new user password
-echo "First, let's set a new password for better security!"
-passwd
+# Set new user password // Done with etcher
+#echo "First, let's set a new password for better security!"
+#passwd
 
-# Enable SSH
-sudo systemctl enable ssh
-sudo systemctl start ssh
+# Enable SSH // Done with etcher
+#sudo systemctl enable ssh
+#sudo systemctl start ssh
 
 # Prepare system
 sudo apt-get update -y
@@ -14,9 +14,8 @@ sudo apt-get upgrade -y
 sudo apt-get install git ruby -y
 
 # Clone this repo
-git clone https://github.com/sinedied/pi-midi-host
-cd pi-midi-host
-
+git clone https://github.com/oermenz/midihub
+cd midihub
 # Optimize for power efficiency and fast boot
 sudo cp config.txt /boot/
 sudo cp cmdline.txt /boot/
