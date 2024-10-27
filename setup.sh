@@ -18,6 +18,7 @@ sudo apt-get install avahi-daemon -y
 
 # Install MIDI autoconnect script
 sudo cp connectall.rb /usr/local/bin/
+sudo chmod +x /usr/local/bin/connectall.rb
 sudo cp 33-midiusb.rules /etc/udev/rules.d/
 sudo udevadm control --reload
 sudo service udev restart
@@ -54,6 +55,7 @@ sudo systemctl start btmidi.service
 # Setup OLED screem
 sudo apt install fonts-lato
 sudo cp midioled.py /usr/local/bin/
+sudo chmod a+x /usr/local/bin/midioled.py
 
 # Create alias to show connected devices
 echo >> ~/.bashrc
