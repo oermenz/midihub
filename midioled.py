@@ -3,6 +3,7 @@
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
+from demo.opts import get_device
 
 import sys
 import time
@@ -45,6 +46,11 @@ for y in range(0, len(sys.argv)-1):
     # draw.rectangle(device.bounding_box, outline="white", fill="black")
     draw.text((x, top+y*height), sys.argv[y+1], font=font, fill="white")
 
-time.sleep(1)
-
 releaseLock(lock_fd)
+
+if __name__ == "__main__":
+    try:
+        device = get_device()
+        main()
+    except KeyboardInterrupt:
+        pass
