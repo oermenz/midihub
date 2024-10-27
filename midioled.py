@@ -38,10 +38,12 @@ height = 12
 bottom = height-padding
 x = 0
 
+font = ImageFont.truetype('/usr/share/fonts/truetype/lato/Lato-Semibold.ttf', height)
+
 for y in range(0, len(sys.argv)-1):
   with canvas(device) as draw:
-    draw.rectangle(device.bounding_box, outline="white", fill="black")
-    draw.text((x, top+y*height), sys.argv[y+1], fill="white")
+    # draw.rectangle(device.bounding_box, outline="white", fill="black")
+    draw.text((x, top+y*height), sys.argv[y+1], font=font, fill="white")
 
 time.sleep(1)
 
