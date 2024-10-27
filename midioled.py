@@ -3,7 +3,7 @@
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
-from demo.opts import get_device
+from demo_opts import get_device
 
 import sys
 import time
