@@ -45,6 +45,7 @@ for y in range(0, len(sys.argv)-1):
   with canvas(device) as draw:
     # draw.rectangle(device.bounding_box, outline="white", fill="black")
     draw.text((x, top+y*height), sys.argv[y+1], font=font, fill="white")
+time.sleep(3)
 
 releaseLock(lock_fd)
 
