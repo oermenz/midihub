@@ -56,3 +56,14 @@ $devices.each do |device1, ports1|
     end
   end
 end
+
+# Enabling OLED screen
+cmd = "/usr/local/bin/midioled.py"
+if names.length>1 then
+  command = "#{cmd} #{names.map(&:inspect).join(' ')} "
+else
+  command = "#{cmd} '' 'No MIDI' 'connections' "
+end
+
+pid = spawn(command)
+Process.detach(pid) 
