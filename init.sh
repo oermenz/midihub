@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 sudo apt-get install git -y
-git clone https://github.com/sinedied/pi-midi-host.git
-cd pi-midi-host
+git clone https://github.com/oermenz/midihub.git
+cd midihub
 
 echo "This will take a while, grab a cup of coffee..."
 echo
