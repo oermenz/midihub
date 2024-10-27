@@ -12,7 +12,7 @@ StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=btmidi
 Restart=always
-ExecStart=/usr/bin/btmidi-server -n "RPi-Bluetooth"
+ExecStart=/usr/bin/btmidi-server -n "midihub BT"
 
 [Install]
 WantedBy=multi-user.target
