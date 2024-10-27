@@ -51,6 +51,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable btmidi.service
 sudo systemctl start btmidi.service
 
+# Setup OLED screem
+sudo apt install fonts-lato
+sudo cp midioled.py /usr/local/bin/
+
 # Create alias to show connected devices
 echo >> ~/.bashrc
 echo "alias midi='aconnect -l'" >> ~/.bashrc
