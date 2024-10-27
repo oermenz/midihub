@@ -1,13 +1,5 @@
 #!/usr/bin/bash
 
-# Set new user password // Done with etcher
-#echo "First, let's set a new password for better security!"
-#passwd
-
-# Enable SSH // Done with etcher
-#sudo systemctl enable ssh
-#sudo systemctl start ssh
-
 # Prepare system
 sudo apt-get update -y
 sudo apt-get upgrade -y
@@ -16,14 +8,13 @@ sudo apt-get install git ruby -y
 # Clone this repo
 git clone https://github.com/oermenz/midihub
 cd midihub
+
 # Optimize for power efficiency and fast boot
 sudo cp config.txt /boot/
 sudo cp cmdline.txt /boot/
 
 # Make device identifiable more easily on the network
 sudo apt-get install avahi-daemon -y
-sudo sed -i -- 's/raspberrypi/midihub/g' /etc/hostname /etc/hosts
-sudo hostname midihub
 
 # Install MIDI autoconnect script
 sudo cp connectall.rb /usr/local/bin/
@@ -37,6 +28,9 @@ sudo systemctl start midi.service
 
 # FW for older Midisport devices
 sudo apt-get install midisport-firmware -y
+
+# Bluez for Python3
+sudo apt install python3-bluez
 
 # Setup MIDI bluetooth
 git clone https://github.com/oxesoft/bluez
@@ -68,16 +62,16 @@ echo "alias connect='connectall.rb'" >> ~/.bashrc
 echo >> ~/.bashrc
 
 # Make FS read-only to avoid SD card corruption
-git clone https://gitlab.com/larsfp/rpi-readonly
-cd rpi-readonly
-sudo ./setup.sh -y
-cd ..
+# git clone https://gitlab.com/larsfp/rpi-readonly
+# cd rpi-readonly
+# sudo ./setup.sh -y
+# cd ..
 
 # Turn on read-only mode
+# ro
 # Use command "rw" to enable writes again
-ro
 
-echo "The system will now reboot in read-only mode."
-echo "Use command \"rw\" to enable writes again."
+# echo "The system will now reboot in read-only mode."
+# echo "Use command \"rw\" to enable writes again."
 read -p "Press [enter] to reboot"
 sudo reboot
