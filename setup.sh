@@ -10,8 +10,8 @@ git clone https://github.com/oermenz/midihub
 cd midihub
 
 # Optimize for power efficiency and fast boot
-sudo cp config.txt /boot/
-sudo cp cmdline.txt /boot/
+sudo cp config.txt /boot/firmware
+sudo cp cmdline.txt /boot/firmware
 
 # Make device identifiable more easily on the network
 sudo apt-get install avahi-daemon -y
