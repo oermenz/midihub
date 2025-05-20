@@ -1,12 +1,16 @@
 [Unit]
-Description=MIDI Hub OLED Display
-After=multi-user.target
+Description=Headless MIDI Hub
+After=network.target sound.target
 
 [Service]
 ExecStart=/usr/bin/python3 /home/pi/midihub/midihub_headless.py
 WorkingDirectory=/home/pi/midihub
+StandardOutput=journal
+StandardError=journal
 Restart=on-failure
+RestartSec=5
 User=pi
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
