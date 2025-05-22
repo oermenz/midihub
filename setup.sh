@@ -28,8 +28,7 @@ pip3 install mido python-rtmidi adafruit-circuitpython-ssd1306 Pillow --break-sy
 
 # 5. Copy and enable systemd service
 echo "📂 Setting up script and services..."
-cp midihub.py /usr/local/bin/midihub.py
-chmod +x /usr/local/bin/midihub.py
+chmod +x /home/oermens/midihub/midihub.py
 cp midihub.service /etc/systemd/system/midihub.service
 
 systemctl daemon-reload
