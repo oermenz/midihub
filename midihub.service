@@ -10,7 +10,7 @@ StandardOutput=journal
 StandardError=journal
 Restart=on-failure
 RestartSec=5
-User=pi
+User=oermens
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
