@@ -1,6 +1,9 @@
 [Unit]
 Description=Headless MIDI Hub
 After=network.target sound.target
+Description=MidiHub Service
+After=bluetooth.target dbus.service network.target
+Requires=bluetooth.target
 
 [Service]
 ExecStart=/usr/bin/python3 /home/pi/midihub/midihub.py
