@@ -31,7 +31,6 @@ echo "📂 Setting up script and services..."
 cp midihub.py /usr/local/bin/midihub.py
 chmod +x /usr/local/bin/midihub.py
 cp midihub.service /etc/systemd/system/midihub.service
-chmod +x /etc/systemd/system/midihub.service
 
 systemctl daemon-reload
 systemctl enable midihub.service
