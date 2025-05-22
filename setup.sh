@@ -24,7 +24,7 @@ apt install -y python3 python3-pip python3-venv git i2c-tools libffi-dev libjpeg
 
 # 4. Install Python packages
 echo "📦 Installing Python packages..."
-pip3 install mido python-rtmidi adafruit-circuitpython-ssd1306 Pillow
+pip3 install mido python-rtmidi adafruit-circuitpython-ssd1306 Pillow --break-system-packages
 
 # 5. Copy and enable systemd service
 echo "📂 Setting up systemd service..."
