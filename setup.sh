@@ -33,6 +33,7 @@ fi
 # 4. Create Python virtual environment
 echo "🐍 Creating Python virtual environment..."
 sudo python3 -m venv --system-site-packages "$VENV_DIR"
+source ~/midihub/venv/bin/activate
 
 # 5. Upgrade pip and install python packages inside venv
 echo "📦 Installing Python packages inside virtual environment..."
