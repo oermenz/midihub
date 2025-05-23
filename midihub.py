@@ -118,7 +118,6 @@ def main():
         if updated or (time.time() - last_update_time) > 0.1:
             ch = last_midi_msg.channel + 1 if last_midi_msg and hasattr(last_midi_msg, 'channel') else None
             update_oled(ch=ch, cc=last_cc, val=last_val, note=last_note_name, bpm=last_bpm)
-            global last_update_time
             last_update_time = time.time()
 
         time.sleep(0.01)  # small delay to reduce CPU usage
