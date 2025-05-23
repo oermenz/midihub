@@ -15,7 +15,7 @@ raspi-config nonint do_i2c 0
 # 2. Update and install system packages
 echo "📦 Installing system dependencies..."
 apt update
-apt install -y python3 python3-pip python3-venv git i2c-tools libffi-dev libjpeg-dev zlib1g-dev libfreetype6-dev
+apt install -y python3 python3-pip python3-venv git i2c-tools libffi-dev libjpeg-dev zlib1g-dev libfreetype6-dev python3-gi python3-gi-cairo gir1.2-gtk-3.0
 
 # 3. Optional: Set up a Python virtual environment (can skip if using system Python)
 # echo "🐍 Setting up virtual environment..."
