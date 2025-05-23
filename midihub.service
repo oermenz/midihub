@@ -4,15 +4,13 @@ After=network.target sound.target bluetooth.target dbus.service
 Requires=bluetooth.target
 
 [Service]
-User=oermens
-WorkingDirectory=/home/oermens/midihub
-Environment=VIRTUAL_ENV=/home/oermens/midihub/venv
-Environment=PATH=/home/oermens/midihub/venv/bin:/usr/bin:/bin
 ExecStart=/home/oermens/midihub/venv/bin/python /home/oermens/midihub/midihub.py
+WorkingDirectory=/home/oermens/midihub
 StandardOutput=journal
 StandardError=journal
-Restart=always
+Restart=on-failure
 RestartSec=5
+User=oermens
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
