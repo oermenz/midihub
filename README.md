@@ -31,20 +31,15 @@ No desktop needed — runs automatically on boot using a systemd service.
 ## 🚀 Setup Instructions
 
 1. **Update and install**
+
 ```bash
-sudo apt update -y
-sudo apt upgrade -y
-sudo apt install git
+sudo apt update -y && sudo apt upgrade -y
+sudo apt install git - y
 ```
 
-2. **Clone the repository**
-```bash
-git clone https://github.com/oermenz/midihub.git
-cd midihub
-```
+2. **Download and run setup**
 
-3. **Run the setup**
 ```bash
-sudo chmod +x setup.sh
-sudo ./setup.sh
+git clone https://github.com/oermenz/midihub.git ~/midihub && cd ~/midihub
+sudo chmod +x setup.sh && sudo ./setup.sh
 ```
