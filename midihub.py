@@ -22,7 +22,6 @@ last_cc = None
 last_val = None
 last_note_name = "---"
 last_bpm = 0
-last_update_time = 0
 
 # === MIDI clock timing ===
 clock_count = 0
