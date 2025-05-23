@@ -32,6 +32,7 @@ fi
 
 # 4. Create Python virtual environment
 echo "🐍 Creating Python virtual environment..."
+sudo python3 -m venv --system-site-packages ~/midihub/venv
 sudo -u $USER_NAME python3 -m venv "$VENV_DIR"
 
 # 5. Upgrade pip and install python packages inside venv
