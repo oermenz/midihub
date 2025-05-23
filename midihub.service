@@ -4,8 +4,9 @@ After=network.target sound.target bluetooth.target dbus.service
 Requires=bluetooth.target
 
 [Service]
-ExecStart=/home/oermens/midihub/venv/bin/python /home/oermens/midihub/midihub.py
 WorkingDirectory=/home/oermens/midihub
+Environment="PATH=/home/oermens/midihub/venv/bin"
+ExecStart=/home/oermens/midihub/venv/bin/python /home/oermens/midihub/midihub.py
 StandardOutput=journal
 StandardError=journal
 Restart=on-failure
