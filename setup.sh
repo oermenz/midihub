@@ -20,7 +20,7 @@ raspi-config nonint do_i2c 0
 # 2. Update and install system dependencies
 echo "📦 Installing system dependencies..."
 apt update
-apt install -y python3 python3-pip python3-venv git i2c-tools libffi-dev libjpeg-dev zlib1g-dev libfreetype6-dev python3-gi gir1.2-gtk-3.0 libgirepository1.0-dev
+apt install -y python3 python3-pip python3-venv libcairo2-dev pkg-config python3-dev git i2c-tools libffi-dev libjpeg-dev zlib1g-dev libfreetype6-dev python3-gi gir1.2-gtk-3.0 libgirepository1.0-dev
 
 # 3. Clone repo (if not already cloned)
 if [ ! -d "$MIDIHUB_DIR" ]; then
