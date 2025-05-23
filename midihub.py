@@ -1,129 +1,126 @@
+#!/usr/bin/env python3
 import time
-import subprocess
-import threading
 import mido
-from mido import get_input_names
-from PIL import Image, ImageDraw, ImageFont
 import board
 import busio
 import adafruit_ssd1306
+from pydbus import SystemBus
+from gi.repository import GLib
+from threading import Thread
+from PIL import Image, ImageDraw, ImageFont
 
-# === OLED SETUP ===
+# ---------------------- OLED SETUP ----------------------
 WIDTH = 128
 HEIGHT = 64
-LINE_HEIGHT = 10  # with spacing
-SPACING = 2
-SCROLL_SPEED = 0.2
-
 i2c = busio.I2C(board.SCL, board.SDA)
 oled = adafruit_ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
-font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+oled.fill(0)
+oled.show()
 
-# === DATA TRACKING ===
-latest_cc = "CC: --"
-latest_note = "Note: -- --"
+font = ImageFont.load_default()
+image = Image.new("1", (WIDTH, HEIGHT))
+draw = ImageDraw.Draw(image)
 
-scroll_offsets = {}
-scroll_directions = {}
+def display_message(top="", mid="", bot=""):
+    draw.rectangle((0, 0, WIDTH, HEIGHT), outline=0, fill=0)
+    draw.text((0, 0), top, font=font, fill=255)
+    draw.text((0, 24), mid, font=font, fill=255)
+    draw.text((0, 48), bot, font=font, fill=255)
+    oled.image(image)
+    oled.show()
 
-def get_displayable_devices():
-    devices = get_input_names()
-    cleaned = []
-    for name in devices:
-        if "kernel" not in name.lower():
-            cleaned.append(name.strip())
-    return cleaned[:5]
+# ---------------------- MIDI SETUP ----------------------
+in_ports = [mido.open_input(name) for name in mido.get_input_names()]
+out_ports = [mido.open_output(name) for name in mido.get_output_names()]
 
-def scroll_text(text, line_index):
-    text_width = font.getlength(text)
-    if text_width <= WIDTH:
-        return text
+note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
+              'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-    offset = scroll_offsets.get(line_index, 0)
-    direction = scroll_directions.get(line_index, 1)
-
-    max_offset = int(text_width - WIDTH)
-
-    if direction == 1:
-        offset += 2
-        if offset >= max_offset:
-            direction = -1
-    else:
-        offset -= 2
-        if offset <= 0:
-            direction = 1
-
-    scroll_offsets[line_index] = offset
-    scroll_directions[line_index] = direction
-
-    return text[int(offset/2):]
-
-def midi_listener():
-    global latest_cc, latest_note
-    inputs = mido.get_input_names()
-    ports = [mido.open_input(name, callback=handle_midi) for name in inputs]
+def note_number_to_name(n):
+    return f"{note_names[n % 12]}{n // 12 - 1}"
 
 def handle_midi(msg):
-    global latest_cc, latest_note
-    if msg.type == 'control_change':
-        latest_cc = f"CC: {msg.control}"
-    elif msg.type == 'note_on':
-        note_name = note_number_to_name(msg.note)
-        latest_note = f"Note: {note_name} {msg.velocity}"
+    try:
+        if msg.type in ('note_on', 'note_off', 'control_change'):
+            ch = msg.channel + 1
+            cc = getattr(msg, 'control', '-') if hasattr(msg, 'control') else '-'
+            val = getattr(msg, 'value', '-') if hasattr(msg, 'value') else '-'
+            note = note_number_to_name(msg.note) if hasattr(msg, 'note') else '-'
 
-def note_number_to_name(note):
-    notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    return notes[note % 12] + str(note // 12)
+            display_message(f"CH:{ch} CC:{cc} VAL:{val} NOTE:{note}",
+                            f"{msg.type.upper()}",
+                            f"{msg}")
+        for out in out_ports:
+            out.send(msg)
+    except Exception as e:
+        display_message("MIDI Error", str(e), "")
 
-def connect_all_midi_ports():
-    inputs = get_alsa_ports('-i')
-    outputs = get_alsa_ports('-o')
-    for inp in inputs:
-        for out in outputs:
-            subprocess.run(['aconnect', inp, out], stderr=subprocess.DEVNULL)
-
-def get_alsa_ports(flag):
-    result = subprocess.run(['aconnect', flag], capture_output=True, text=True)
-    ports = []
-    for line in result.stdout.splitlines():
-        if ':' in line:
-            ports.append(line.split()[0])
-    return ports
-
-def draw_loop():
-    device_page = 0
+def midi_loop():
     while True:
-        devices = get_displayable_devices()
-        image = Image.new("1", (WIDTH, HEIGHT))
-        draw = ImageDraw.Draw(image)
+        for port in in_ports:
+            for msg in port.iter_pending():
+                handle_midi(msg)
+        time.sleep(0.001)
 
-        # Draw header (top line)
-        header = f"{latest_cc} | {latest_note}"
-        draw.text((0, 0), header, font=font, fill=255)
+# ---------------------- BLUETOOTH SETUP ----------------------
+def setup_bt_agent():
+    class NoInputNoOutputAgent:
+        def Release(self): pass
+        def RequestPinCode(self, device): return ''
+        def RequestPasskey(self, device): return dbus.UInt32(0)
+        def RequestConfirmation(self, device, passkey): return True
+        def RequestAuthorization(self, device): return True
+        def AuthorizeService(self, device, uuid): return True
+        def Cancel(self): pass
 
-        # Draw MIDI device names below
-        lines_available = (HEIGHT - LINE_HEIGHT) // LINE_HEIGHT
-        start = device_page * lines_available
-        end = start + lines_available
-        visible_devices = devices[start:end]
+    bus = SystemBus()
+    adapter_path = '/org/bluez/hci0'
+    bluez = bus.get('org.bluez', '/org/bluez')
+    adapter = bus.get('org.bluez', adapter_path)
 
-        for i, dev in enumerate(visible_devices):
-            y = LINE_HEIGHT + i * LINE_HEIGHT
-            line_index = start + i
-            scrolled = scroll_text(dev, line_index)
-            draw.text((0, y), scrolled, font=font, fill=255)
+    adapter.Powered = True
+    adapter.Discoverable = True
+    adapter.Pairable = True
 
-        oled.image(image)
-        oled.show()
+    agent_path = "/test/agent"
+    obj = bus.get("org.bluez", "/org/bluez")
+    manager = bus.get("org.bluez", "/org/bluez")
 
-        if len(devices) > lines_available:
-            device_page = (device_page + 1) % ((len(devices) + lines_available - 1) // lines_available)
+    from pydbus.generic import signal
+    from pydbus.generic import Property
+    from pydbus import Variant
 
-        time.sleep(SCROLL_SPEED)
+    class Agent:
+        def Release(self): pass
+        def RequestPinCode(self, device): return "0000"
+        def RequestPasskey(self, device): return dbus.UInt32(0)
+        def DisplayPasskey(self, device, passkey, entered): pass
+        def RequestConfirmation(self, device, passkey): return True
+        def AuthorizeService(self, device, uuid): return True
+        def Cancel(self): pass
 
-# === MAIN ===
+    bus.register_object(agent_path, Agent(),
+                        None)
+
+    agent_manager = bus.get("org.bluez", "/org/bluez")
+    agent_manager.RegisterAgent(agent_path, "NoInputNoOutput")
+    agent_manager.RequestDefaultAgent(agent_path)
+
+    display_message("Bluetooth", "Agent registered", "Waiting for pairing...")
+
+# ---------------------- MAIN ----------------------
 if __name__ == "__main__":
-    time.sleep(2)  # Wait for MIDI devices
-    connect_all_midi_ports()
-    threading.Thread(target=midi_listener, daemon=True).start()
-    draw_loop()
+    try:
+        display_message("Starting MIDI Hub", "BT Agent + MIDI", "")
+        setup_bt_agent()
+
+        t = Thread(target=midi_loop)
+        t.start()
+
+        GLib.MainLoop().run()
+
+    except KeyboardInterrupt:
+        display_message("Shutting down...", "", "")
+        time.sleep(1)
+        oled.fill(0)
+        oled.show()
