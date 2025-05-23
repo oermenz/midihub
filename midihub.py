@@ -1,6 +1,6 @@
 import time
 import threading
-from mido import MidiInput, MidiOutput, get_input_names, get_output_names, open_input, open_output
+from mido import get_input_names, get_output_names, open_input, open_output
 import mido
 from pydbus import SystemBus
 from gi.repository import GLib
