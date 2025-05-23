@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔧 Starting Midihub clean setup..."
+echo "🔧 Starting Midihub setup..."
 
 # Ensure script is run as root
 if [ "$EUID" -ne 0 ]; then
@@ -8,66 +8,49 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# Enable I2C
+# Variables
+USER_NAME="oermens"
+MIDIHUB_DIR="/home/$USER_NAME/midihub"
+VENV_DIR="$MIDIHUB_DIR/venv"
+
+# 1. Enable I2C interface
 echo "🔌 Enabling I²C interface..."
 raspi-config nonint do_i2c 0
 
-# Update and install system packages
+# 2. Update and install system dependencies
 echo "📦 Installing system dependencies..."
 apt update
 apt install -y python3 python3-pip python3-venv git i2c-tools libffi-dev libjpeg-dev zlib1g-dev libfreetype6-dev
 
-# Clone or update midihub repo
-MIDIHUB_DIR="/home/oermens/midihub"
+# 3. Clone repo (if not already cloned)
 if [ ! -d "$MIDIHUB_DIR" ]; then
-  echo "📥 Cloning Midihub repository..."
-  sudo -u oermens git clone https://github.com/oermenz/midihub.git "$MIDIHUB_DIR"
+  echo "📂 Cloning midihub repository..."
+  sudo -u $USER_NAME git clone https://github.com/oermenz/midihub.git "$MIDIHUB_DIR"
 else
-  echo "🔄 Updating Midihub repository..."
-  cd "$MIDIHUB_DIR"
-  sudo -u oermens git pull
+  echo "📂 Midihub directory exists, skipping clone."
 fi
 
-# Create and setup Python virtual environment
+# 4. Create Python virtual environment
 echo "🐍 Creating Python virtual environment..."
-sudo -u pi python3 -m venv "$MIDIHUB_DIR/venv"
+sudo -u $USER_NAME python3 -m venv "$VENV_DIR"
 
-echo "📦 Installing Python packages in venv..."
-sudo -u pi bash -c "source $MIDIHUB_DIR/venv/bin/activate && pip install --upgrade pip && pip install mido python-rtmidi adafruit-circuitpython-ssd1306 Pillow pydbus"
+# 5. Upgrade pip and install python packages inside venv
+echo "📦 Installing Python packages inside virtual environment..."
+sudo -u $USER_NAME "$VENV_DIR/bin/pip" install --upgrade pip
+sudo -u $USER_NAME "$VENV_DIR/bin/pip" install mido python-rtmidi adafruit-circuitpython-ssd1306 Pillow pydbus
 
-# Setup systemd service
+# 6. Copy systemd service file and enable it
 echo "📂 Setting up systemd service..."
+cp "$MIDIHUB_DIR/midihub.service" /etc/systemd/system/midihub.service
+chmod 644 /etc/systemd/system/midihub.service
 
-SERVICE_FILE="/etc/systemd/system/midihub.service"
-
-cat > "$SERVICE_FILE" <<EOL
-[Unit]
-Description=Headless MIDI Hub
-After=network.target sound.target bluetooth.target dbus.service
-Requires=bluetooth.target
-
-[Service]
-ExecStart=$MIDIHUB_DIR/venv/bin/python $MIDIHUB_DIR/midihub.py
-WorkingDirectory=$MIDIHUB_DIR
-StandardOutput=journal
-StandardError=journal
-Restart=on-failure
-RestartSec=5
-User=oermens
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOL
-
-chmod 644 "$SERVICE_FILE"
-
+# Reload systemd, enable and start service
 systemctl daemon-reload
 systemctl enable midihub.service
 systemctl restart midihub.service
 
-echo "✅ Setup complete. A reboot is recommended."
-
+# 7. Reboot prompt
+echo "✅ Setup complete. Reboot recommended."
 read -p "Would you like to reboot now? (y/n): " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
   reboot
