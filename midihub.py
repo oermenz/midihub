@@ -1,126 +1,243 @@
-#!/usr/bin/env python3
 import time
+import threading
+from mido import MidiInput, MidiOutput, get_input_names, get_output_names, open_input, open_output
 import mido
-import board
-import busio
-import adafruit_ssd1306
 from pydbus import SystemBus
 from gi.repository import GLib
-from threading import Thread
+from adafruit_ssd1306 import SSD1306_I2C
 from PIL import Image, ImageDraw, ImageFont
 
-# ---------------------- OLED SETUP ----------------------
-WIDTH = 128
-HEIGHT = 64
+# --- OLED setup ---
+import board
+import busio
+
 i2c = busio.I2C(board.SCL, board.SDA)
-oled = adafruit_ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
-oled.fill(0)
-oled.show()
+oled = SSD1306_I2C(128, 32, i2c)
 
 font = ImageFont.load_default()
-image = Image.new("1", (WIDTH, HEIGHT))
-draw = ImageDraw.Draw(image)
 
-def display_message(top="", mid="", bot=""):
-    draw.rectangle((0, 0, WIDTH, HEIGHT), outline=0, fill=0)
-    draw.text((0, 0), top, font=font, fill=255)
-    draw.text((0, 24), mid, font=font, fill=255)
-    draw.text((0, 48), bot, font=font, fill=255)
-    oled.image(image)
-    oled.show()
+# --- Globals ---
+last_ch = 0
+last_cc = 0
+last_val = 0
+last_note = ""
+bpm = 0
 
-# ---------------------- MIDI SETUP ----------------------
-in_ports = [mido.open_input(name) for name in mido.get_input_names()]
-out_ports = [mido.open_output(name) for name in mido.get_output_names()]
+# MIDI Fighter Twister device name (change if needed)
+MFT_NAME = "Midi Fighter Twister"
 
-note_names = ['C', 'C#', 'D', 'D#', 'E', 'F',
-              'F#', 'G', 'G#', 'A', 'A#', 'B']
+# MIDI Clock BPM calculator
+class MidiClockBPM:
+    def __init__(self):
+        self.tick_times = []
+        self.bpm = 0
 
-def note_number_to_name(n):
-    return f"{note_names[n % 12]}{n // 12 - 1}"
+    def clock_tick(self):
+        now = time.time()
+        self.tick_times.append(now)
+        # Keep last 24 ticks (~1 bar at 24 ppqn)
+        if len(self.tick_times) > 24:
+            self.tick_times.pop(0)
+            delta = self.tick_times[-1] - self.tick_times[0]
+            if delta > 0:
+                # MIDI clock sends 24 pulses per quarter note
+                self.bpm = 60 / (delta / 24)
+        return self.bpm
 
-def handle_midi(msg):
-    try:
-        if msg.type in ('note_on', 'note_off', 'control_change'):
-            ch = msg.channel + 1
-            cc = getattr(msg, 'control', '-') if hasattr(msg, 'control') else '-'
-            val = getattr(msg, 'value', '-') if hasattr(msg, 'value') else '-'
-            note = note_number_to_name(msg.note) if hasattr(msg, 'note') else '-'
+bpm_calc = MidiClockBPM()
 
-            display_message(f"CH:{ch} CC:{cc} VAL:{val} NOTE:{note}",
-                            f"{msg.type.upper()}",
-                            f"{msg}")
-        for out in out_ports:
-            out.send(msg)
-    except Exception as e:
-        display_message("MIDI Error", str(e), "")
+# --- Bluetooth MIDI pairing handler ---
+class BluetoothMidiPairer:
+    def __init__(self):
+        self.bus = SystemBus()
+        self.adapter_path = None
+        self.adapter = None
+        self.find_adapter()
 
-def midi_loop():
-    while True:
-        for port in in_ports:
-            for msg in port.iter_pending():
-                handle_midi(msg)
-        time.sleep(0.001)
+    def find_adapter(self):
+        mngr = self.bus.get('org.bluez', '/')
+        objects = mngr.GetManagedObjects()
+        for path, interfaces in objects.items():
+            if 'org.bluez.Adapter1' in interfaces:
+                self.adapter_path = path
+                self.adapter = self.bus.get('org.bluez', path)
+                break
 
-# ---------------------- BLUETOOTH SETUP ----------------------
-def setup_bt_agent():
-    class NoInputNoOutputAgent:
-        def Release(self): pass
-        def RequestPinCode(self, device): return ''
-        def RequestPasskey(self, device): return dbus.UInt32(0)
-        def RequestConfirmation(self, device, passkey): return True
-        def RequestAuthorization(self, device): return True
-        def AuthorizeService(self, device, uuid): return True
-        def Cancel(self): pass
+    def start_discovery(self):
+        if self.adapter:
+            self.adapter.StartDiscovery()
 
-    bus = SystemBus()
-    adapter_path = '/org/bluez/hci0'
-    bluez = bus.get('org.bluez', '/org/bluez')
-    adapter = bus.get('org.bluez', adapter_path)
+    def stop_discovery(self):
+        if self.adapter:
+            self.adapter.StopDiscovery()
 
-    adapter.Powered = True
-    adapter.Discoverable = True
-    adapter.Pairable = True
+    def pair_device(self, device_path):
+        device = self.bus.get('org.bluez', device_path)
+        try:
+            device.Pair()
+        except Exception as e:
+            print(f"Pairing failed: {e}")
 
-    agent_path = "/test/agent"
-    obj = bus.get("org.bluez", "/org/bluez")
-    manager = bus.get("org.bluez", "/org/bluez")
+    def trust_device(self, device_path):
+        device = self.bus.get('org.bluez', device_path)
+        try:
+            device.Trust()
+        except Exception as e:
+            print(f"Trust failed: {e}")
 
-    from pydbus.generic import signal
-    from pydbus.generic import Property
-    from pydbus import Variant
+# --- MIDI handling ---
+class MidiHub:
+    def __init__(self):
+        self.in_ports = []
+        self.out_ports = []
+        self.running = True
+        self.bpm = 0
 
-    class Agent:
-        def Release(self): pass
-        def RequestPinCode(self, device): return "0000"
-        def RequestPasskey(self, device): return dbus.UInt32(0)
-        def DisplayPasskey(self, device, passkey, entered): pass
-        def RequestConfirmation(self, device, passkey): return True
-        def AuthorizeService(self, device, uuid): return True
-        def Cancel(self): pass
+        # For display info
+        self.last_ch = 0
+        self.last_cc = 0
+        self.last_val = 0
+        self.last_note = ""
 
-    bus.register_object(agent_path, Agent(),
-                        None)
+        # Open ports and store references
+        self.open_ports()
 
-    agent_manager = bus.get("org.bluez", "/org/bluez")
-    agent_manager.RegisterAgent(agent_path, "NoInputNoOutput")
-    agent_manager.RequestDefaultAgent(agent_path)
+    def open_ports(self):
+        input_names = get_input_names()
+        output_names = get_output_names()
+        self.in_ports = []
+        self.out_ports = []
 
-    display_message("Bluetooth", "Agent registered", "Waiting for pairing...")
+        # Open all inputs
+        for name in input_names:
+            try:
+                port = open_input(name)
+                self.in_ports.append(port)
+            except:
+                pass
 
-# ---------------------- MAIN ----------------------
-if __name__ == "__main__":
-    try:
-        display_message("Starting MIDI Hub", "BT Agent + MIDI", "")
-        setup_bt_agent()
+        # Open all outputs
+        for name in output_names:
+            try:
+                port = open_output(name)
+                self.out_ports.append((name, port))
+            except:
+                pass
 
-        t = Thread(target=midi_loop)
-        t.start()
+    def send_message(self, msg):
+        # Send to all outputs except MFT for inputs
+        for name, port in self.out_ports:
+            if MFT_NAME in name:
+                # MFT should NOT receive midi (only send)
+                continue
+            try:
+                port.send(msg)
+            except:
+                pass
 
-        GLib.MainLoop().run()
+    def send_to_mft(self, msg):
+        # Only send to MFT device
+        for name, port in self.out_ports:
+            if MFT_NAME in name:
+                try:
+                    port.send(msg)
+                except:
+                    pass
 
-    except KeyboardInterrupt:
-        display_message("Shutting down...", "", "")
-        time.sleep(1)
-        oled.fill(0)
+    def midi_loop(self):
+        while self.running:
+            for port in self.in_ports:
+                for msg in port.iter_pending():
+                    self.handle_message(msg)
+            time.sleep(0.001)
+
+    def handle_message(self, msg):
+        # Process MIDI Clock for BPM
+        if msg.type == 'clock':
+            self.bpm = bpm_calc.clock_tick()
+
+        # Update display info for CC and Note On messages
+        if msg.type == 'control_change':
+            self.last_ch = msg.channel + 1
+            self.last_cc = msg.control
+            self.last_val = msg.value
+
+        elif msg.type == 'note_on':
+            self.last_ch = msg.channel + 1
+            self.last_note = self.note_name(msg.note)
+
+            # Also send LED dimming CC to MFT for the note-to-encoder mapping here if needed
+            # Example placeholder - implement mapping logic here if desired
+
+        # Forward the message to outputs (except MFT)
+        self.send_message(msg)
+
+    def note_name(self, note):
+        # Convert MIDI note number to name with octave
+        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        octave = (note // 12) - 1
+        name = notes[note % 12]
+        return f"{name}{octave}"
+
+    def stop(self):
+        self.running = False
+        for port in self.in_ports:
+            port.close()
+        for _, port in self.out_ports:
+            port.close()
+
+# --- OLED display updater ---
+class DisplayUpdater:
+    def __init__(self, midi_hub):
+        self.midi_hub = midi_hub
+        self.width = 128
+        self.height = 32
+        self.image = Image.new('1', (self.width, self.height))
+        self.draw = ImageDraw.Draw(self.image)
+
+    def update_display(self):
+        self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
+        # Top line: CH, CC, VAL
+        top_line = f"CH:{self.midi_hub.last_ch} CC:{self.midi_hub.last_cc} VAL:{self.midi_hub.last_val}"
+        # Bottom line: NOTE, BPM
+        bpm_str = f"{self.midi_hub.bpm:.1f}" if self.midi_hub.bpm > 0 else "---"
+        bottom_line = f"NOTE:{self.midi_hub.last_note} BPM:{bpm_str}"
+        self.draw.text((0, 0), top_line, font=font, fill=255)
+        self.draw.text((0, 16), bottom_line, font=font, fill=255)
+        oled.image(self.image)
         oled.show()
+
+    def run(self):
+        while True:
+            self.update_display()
+            time.sleep(0.2)
+
+# --- Main program ---
+def main():
+    midi_hub = MidiHub()
+    display = DisplayUpdater(midi_hub)
+
+    # Start MIDI processing thread
+    midi_thread = threading.Thread(target=midi_hub.midi_loop, daemon=True)
+    midi_thread.start()
+
+    # Start display updater thread
+    display_thread = threading.Thread(target=display.run, daemon=True)
+    display_thread.start()
+
+    # Bluetooth pairing setup (just discovery here, no button yet)
+    bt_pairer = BluetoothMidiPairer()
+    bt_pairer.start_discovery()
+    print("Bluetooth discovery started")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Stopping...")
+    finally:
+        midi_hub.stop()
+        bt_pairer.stop_discovery()
+
+if __name__ == "__main__":
+    main()
