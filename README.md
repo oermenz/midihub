@@ -36,6 +36,8 @@ No desktop needed — runs automatically on boot using a systemd service.
 git clone https://github.com/oermenz/midihub.git
 cd midihub
 
+##
+
 2. **Run the setup**
 
 ```bash
