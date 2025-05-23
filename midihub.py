@@ -2,7 +2,7 @@ import threading
 import queue
 import time
 import mido
-from mido import MidiMessage
+from mido
 from pydbus import SystemBus
 from gi.repository import GLib
 import board
