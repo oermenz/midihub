@@ -2,7 +2,7 @@ import threading
 import queue
 import time
 import mido
-from mido
+from mido import get_input_names, get_output_names, open_input, open_output, Message
 from pydbus import SystemBus
 from gi.repository import GLib
 import board
