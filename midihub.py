@@ -84,7 +84,7 @@ def update_oled(ch=None, cc=None, val=None, note=None, bpm=None):
     oled.show()
 
 def main():
-    global last_midi_msg, last_cc, last_val, last_note_name, last_bpm last_update_time
+    global last_midi_msg, last_cc, last_val, last_note_name, last_bpm, last_update_time
 
     midi_port_name = get_midi_input_name()
     if not midi_port_name:
