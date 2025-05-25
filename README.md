@@ -23,15 +23,15 @@ Midihub is a lightweight, headless Raspberry Pi project perfect for Dawless setu
 
 ## 🚀 Setup Instructions
 
+IMPORTANT:  Change "User=oermens" to your own username (standard=pi) in both .service files
+            after cloning the repository and before running the setup or else it will fail.
+
 1. **Update and install**
 
 ```bash
 sudo apt update -y && sudo apt upgrade -y
 sudo apt install git -y
 ```
-
-## IMPORTANT:  Change "User=oermens" to your username (usually Pi) in both .service files
-               after cloning the repository and before running the setup else it will fail.
 
 2. **Download and run setup**
 
