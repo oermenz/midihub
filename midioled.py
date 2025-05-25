@@ -1,79 +1,66 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import time
 import sys
+import subprocess
+from PIL import Image, ImageDraw, ImageFont
 
-import Adafruit_GPIO.SPI as SPI
+# Import Adafruit SSD1306 library
 import Adafruit_SSD1306
 
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-
-import subprocess
-
-import fcntl
-import errno
-
-def acquireLock():
-    while True:
-      try:
-        ''' acquire exclusive lock file access '''
-        locked_file_descriptor = open('/tmp/lockfile.LOCK', 'w+')
-        fcntl.lockf(locked_file_descriptor, fcntl.LOCK_EX)
-        return locked_file_descriptor
-      except IOError as e:
-        if e.errno != errno.EAGAIN:
-            raise
-        else:
-            time.sleep(2)
-
-def releaseLock(locked_file_descriptor):
-    ''' release exclusive lock file access '''
-    locked_file_descriptor.close()
-
-lock_fd = acquireLock()
-
 # Raspberry Pi pin configuration:
-RST = None     # on the PiOLED this pin isnt used
-# Note the following are only used with SPI:
-DC = 23
-SPI_PORT = 0
-SPI_DEVICE = 0
+RST = None  # on the PiOLED this pin isn't used
 
-# 128x64 display with hardware I2C:
+# Initialize the display
 disp = Adafruit_SSD1306.SSD1306_128_64(rst=RST)
 
+# Begin display
 disp.begin()
-
-# Clear display.
 disp.clear()
 disp.display()
 
-# Create blank image for drawing.
+# Create image buffer with mode '1' for 1-bit color
 width = disp.width
 height = disp.height
 image = Image.new('1', (width, height))
 
-# Get drawing object to draw on image.
+# Get drawing object to draw on image
 draw = ImageDraw.Draw(image)
 
-# Draw a black filled box to clear the image.
-draw.rectangle((0,0,width,height), outline=0, fill=0)
+# Load default font
+font = ImageFont.load_default()
 
-padding = -2
+# Define padding and initial top position
+padding = 2
 top = padding
-bottom = height-padding
+bottom = height - padding
 x = 0
+line_height = 10  # Allow room for 6 lines in 64px height
 
-#font = ImageFont.load_default()
-height = 12
-font = ImageFont.truetype('/usr/share/fonts/truetype/lato/Lato-Semibold.ttf', height)
+def get_midi_devices():
+    try:
+        output = subprocess.check_output(['aconnect', '-i'], text=True)
+        devices = []
+        lines = output.strip().split('\n')
+        for line in lines:
+            if 'client' in line and 'Through' not in line:
+                parts = line.split("'")
+                if len(parts) > 1:
+                    devices.append(parts[1])
+        return devices
+    except subprocess.CalledProcessError:
+        return []
 
-for y in range(0, len(sys.argv)-1):
-    draw.text((x, top+y*height), sys.argv[y+1], font=font, fill=255)
+def display_devices(devices):
+    draw.rectangle((0, 0, width, height), outline=0, fill=0)
+    if devices:
+        for i, device in enumerate(devices[:6]):  # Display up to 6 devices
+            draw.text((x, top + i * line_height), device, font=font, fill=255)
+    else:
+        draw.text((x, top), "No MIDI devices", font=font, fill=255)
+    disp.image(image)
+    disp.display()
 
-disp.image(image)
-disp.display()
-
-releaseLock(lock_fd)    
+if __name__ == "__main__":
+    devices = get_midi_devices()
+    display_devices(devices)
