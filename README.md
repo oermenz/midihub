@@ -30,6 +30,9 @@ sudo apt update -y && sudo apt upgrade -y
 sudo apt install git -y
 ```
 
+## IMPORTANT:  Change "User=oermens" to your username (usually Pi) in both .service files
+               after cloning the repository and before running the setup else it will fail.
+
 2. **Download and run setup**
 
 ```bash
