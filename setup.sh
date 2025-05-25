@@ -5,6 +5,13 @@ set -e
 
 REPO_DIR=$(dirname "$(realpath "$0")")
 
+# Add aliases to .bashrc (RO to set readonly, RW to set readwrite)
+if ! grep -q "alias RO=" ~/.bashrc; then
+  echo "🛠️  Adding RO and RW aliases to ~/.bashrc..."
+  echo "alias RO='sudo /usr/local/bin/readonly.sh RO'" >> ~/.bashrc
+  echo "alias RW='sudo /usr/local/bin/readonly.sh RW'" >> ~/.bashrc
+fi
+
 echo "🔌 Enabling I²C and UART interface..."
 sudo raspi-config nonint do_i2c 0
 sudo raspi-config nonint do_serial 0
