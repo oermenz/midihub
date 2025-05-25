@@ -1,0 +1,32 @@
+# Faster boot
+initial_turbo=30
+start_x=0
+enable_uart=0
+disable_splash=1
+boot_delay=0
+
+# Lower power consumption
+arm_boost=0
+arm_freq=900
+arm_freq_max=900
+arm_freq_min=300
+gpu_freq=250
+core_freq_min=250
+sdram_freq_min=250
+over_voltage=-3
+over_voltage_min=-8
+temp_limit=60
+
+# Interface GPIO
+dtparam=i2c_arm=on
+dtparam=i2c_baudrate=1000000
+dtparam=i2c1=on
+dtparam=i2c=on
+dtparam=i2c_vc
+device_tree_param=i2c=on1=on
+dtparam=spi=off
+dtparam=i2s=off
+
+# Uncomment if not needed
+#dtoverlay=pi3-disable-bt
+#dtoverlay=pi3-disable-wifi
