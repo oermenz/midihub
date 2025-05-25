@@ -5,8 +5,10 @@ set -e
 
 REPO_DIR=$(dirname "$(realpath "$0")")
 
-echo "🔌 Enabling I²C interface..."
+echo "🔌 Enabling I²C and UART interface..."
 sudo raspi-config nonint do_i2c 0
+sudo raspi-config nonint do_serial 0
+sudo sed -i 's/$/ logo.nologo vt.global_cursor_default=0 quiet splash plymouth.ignore-serial-consoles/' /boot/cmdline.txt
 
 echo "📦 Installing system dependencies..."
 sudo apt-get update
