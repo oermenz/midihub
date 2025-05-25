@@ -1,2 +1,5 @@
+mido
+luma.oled
+python-rtmidi
 Adafruit-GPIO
 Adafruit-SSD1306
