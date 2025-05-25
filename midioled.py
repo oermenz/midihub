@@ -30,8 +30,7 @@ state = {
 
 def note_number_to_pitch(note_number):
     """Convert MIDI note number to pitch notation."""
-    notes = ['C', 'C#', 'D', 'D#', 'E', 'F',
-             'F#', 'G', 'G#', 'A', 'A#', 'B']
+    notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     octave = (note_number // 12) - 1
     note = notes[note_number % 12]
     return f"{note}{octave}"
