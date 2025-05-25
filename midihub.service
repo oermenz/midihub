@@ -1,0 +1,11 @@
+[Unit]
+Description=Midihub Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/midihub.py
+Restart=on-failure
+User=oermens
+
+[Install]
+WantedBy=multi-user.target
