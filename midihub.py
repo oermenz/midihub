@@ -32,7 +32,7 @@ def connect_all_ports(ports):
             if i != j:
                 subprocess.call(f"aconnect {p1}:0 {p2}:0", shell=True)
 
-def show_on_lcd(names):
+def show_on_oled(names):
     cmd = "/usr/local/bin/midioled.py"
     if len(names) > 1:
         args = " ".join([repr(name) for name in names])
@@ -44,7 +44,7 @@ def main():
     disconnect_all_midi()
     ports, names = get_midi_ports()
     connect_all_ports(ports)
-    show_on_lcd(names)
+    show_on_oled(names)
 
 if __name__ == "__main__":
     main()
