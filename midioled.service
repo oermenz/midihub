@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=oermens
-WorkingDirectory=/home/oermens/midihub
-ExecStart=/usr/bin/python3 /home/oermens/midihub/midioled.py
+WorkingDirectory=%h/midihub
+ExecStart=%h/.virtualenvs/midihub/bin/python3 %h/midihub/midioled.py
 Restart=on-failure
 RestartSec=5s
 
