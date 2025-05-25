@@ -12,7 +12,7 @@ serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 
 # Load default font
-font = ImageFont.load_default()
+font = ImageFont.load(/oermens/midihub/miniwi-8.bdf)
 
 # Shared state
 state = {
