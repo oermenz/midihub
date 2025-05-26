@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 
 import subprocess
+import time
 import re
 import os
+
+TRIGGER_FILE = "/tmp/midihub_devices.trigger"
+
+def notify_device_change():
+    with open(TRIGGER_FILE, 'w') as f:
+        f.write(str(time.time()))
 
 def run_command(command):
     return subprocess.check_output(command, shell=True, text=True)
