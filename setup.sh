@@ -24,7 +24,13 @@ raspi-config nonint do_serial_cons 1
 # 2. Update and install system dependencies
 echo "📦 Installing system dependencies..."
 apt update
-xargs -a "$MIDIHUB_DIR/dependencies.txt" apt install -y
+
+DEPENDENCIES_FILE="$MIDIHUB_DIR/dependencies.txt"
+if [ -f "$DEPENDENCIES_FILE" ]; then
+  xargs -a "$DEPENDENCIES_FILE" apt install -y
+else
+  echo "⚠️ Warning: $DEPENDENCIES_FILE not found. Skipping system dependencies installation."
+fi
 
 # 3. Clone the repository if it doesn't exist
 if [ ! -d "$MIDIHUB_DIR" ]; then
@@ -40,8 +46,13 @@ su - "$USER_NAME" -c "python3 -m venv --system-site-packages '$VENV_DIR'"
 
 # 5. Upgrade pip and install Python packages inside venv
 echo "📦 Installing Python packages inside virtual environment..."
-su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install --upgrade pip"
-su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install -r '$MIDIHUB_DIR/requirements.txt'"
+REQUIREMENTS_FILE="$MIDIHUB_DIR/requirements.txt"
+if [ -f "$REQUIREMENTS_FILE" ]; then
+  su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install --upgrade pip"
+  su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install -r '$REQUIREMENTS_FILE'"
+else
+  echo "⚠️ Warning: $REQUIREMENTS_FILE not found. Skipping Python package installation."
+fi
 
 # 6. Copy systemd service and target files
 echo "📂 Setting up systemd services and target..."
