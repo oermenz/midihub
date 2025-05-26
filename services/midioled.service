@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=oermens
 WorkingDirectory=%h/midihub
-ExecStart=%h/.virtualenvs/midihub/bin/python3 %h/midihub/midioled.py
+ExecStart=%h/midihub/venv/bin/python3 %h/midihub/midioled.py
 Restart=on-failure
 RestartSec=5s
 
