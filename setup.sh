@@ -1,44 +1,64 @@
-# setup.sh - installation script for Midihub
 #!/bin/bash
 
-set -e
+echo "🔧 Starting Midihub setup..."
 
-REPO_DIR=$(dirname "$(realpath "$0")")
-
-# Add aliases to .bashrc (RO to set readonly, RW to set readwrite)
-if ! grep -q "alias RO=" ~/.bashrc; then
-  echo "🛠️  Adding RO and RW aliases to ~/.bashrc..."
-  echo "alias RO='sudo /usr/local/bin/readonly.sh RO'" >> ~/.bashrc
-  echo "alias RW='sudo /usr/local/bin/readonly.sh RW'" >> ~/.bashrc
+# Ensure the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ Please run as root: sudo ./setup.sh"
+  exit 1
 fi
 
-echo "🔌 Enabling I²C and UART interface..."
+# Variables
+USER_NAME="oermens"
+USER_HOME="/home/$USER_NAME"
+MIDIHUB_DIR="$USER_HOME/midihub"
+VENV_DIR="$MIDIHUB_DIR/venv"
+SERVICE_DIR="/etc/systemd/system"
+
+# 1. Enable I²C and UART interfaces
+echo "🔌 Enabling I²C and UART interfaces..."
 raspi-config nonint do_i2c 0
 raspi-config nonint do_serial 0
-sed -i 's/$/ logo.nologo vt.global_cursor_default=0 quiet splash plymouth.ignore-serial-consoles/' /boot/cmdline.txt
 
+# 2. Update and install system dependencies
 echo "📦 Installing system dependencies..."
-apt-get update
-xargs -a "$REPO_DIR/dependencies.txt" sudo apt-get install -y
+apt update
+xargs -a "$MIDIHUB_DIR/dependencies.txt" apt install -y
 
-echo "🐍 Installing Python packages globally..."
-pip3 install -r "$REPO_DIR/requirements.txt"
+# 3. Clone the repository if it doesn't exist
+if [ ! -d "$MIDIHUB_DIR" ]; then
+  echo "📂 Cloning midihub repository..."
+  su - "$USER_NAME" -c "git clone https://github.com/oermenz/midihub.git '$MIDIHUB_DIR'"
+else
+  echo "📂 Midihub directory exists, skipping clone."
+fi
 
-echo "📦 Copying udev rules & systemd service..."
-cp "$REPO_DIR"/33-midiusb.rules /etc/udev/rules.d/
-cp "$REPO_DIR"/44-midibt.rules /etc/udev/rules.d/
-cp "$REPO_DIR"/midihub.service /etc/systemd/system/midihub.service
-chmod 644 /etc/systemd/system/midihub.service
-udevadm control --reload-rules
-udevadm trigger
+# 4. Create Python virtual environment
+echo "🐍 Creating Python virtual environment..."
+su - "$USER_NAME" -c "python3 -m venv --system-site-packages '$VENV_DIR'"
 
-echo "📂 Installing scripts..."
-cp "$REPO_DIR"/midioled.py /usr/local/bin/
-cp "$REPO_DIR"/midihub.py /usr/local/bin/
-chmod +x /usr/local/bin/midioled.py
-chmod +x /usr/local/bin/midihub.py
+# 5. Upgrade pip and install Python packages inside venv
+echo "📦 Installing Python packages inside virtual environment..."
+su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install --upgrade pip"
+su - "$USER_NAME" -c "'$VENV_DIR/bin/pip' install -r '$MIDIHUB_DIR/requirements.txt'"
 
-echo "✅ Setup complete. Reboot recommended."
+# 6. Copy systemd service and target files
+echo "📂 Setting up systemd services and target..."
+cp "$MIDIHUB_DIR/services/midihub.service" "$SERVICE_DIR/"
+cp "$MIDIHUB_DIR/services/midioled.service" "$SERVICE_DIR/"
+cp "$MIDIHUB_DIR/services/midihub.target" "$SERVICE_DIR/"
+chmod 644 "$SERVICE_DIR/midihub.service" "$SERVICE_DIR/midioled.service" "$SERVICE_DIR/midihub.target"
+
+# 7. Reload systemd, enable and start services
+echo "🔄 Reloading systemd daemon and enabling services..."
+systemctl daemon-reload
+systemctl enable midihub.service
+systemctl enable midioled.service
+systemctl enable midihub.target
+systemctl restart midihub.target
+
+# 8. Reboot prompt
+echo "✅ Setup complete. A reboot is recommended."
 read -p "Would you like to reboot now? (y/n): " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
   reboot
