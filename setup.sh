@@ -18,7 +18,8 @@ SERVICE_DIR="/etc/systemd/system"
 # 1. Enable I²C and UART interfaces
 echo "🔌 Enabling I²C and UART interfaces..."
 raspi-config nonint do_i2c 0
-raspi-config nonint do_serial 0
+raspi-config nonint do_serial_hw 0
+raspi-config nonint do_serial_cons 1
 
 # 2. Update and install system dependencies
 echo "📦 Installing system dependencies..."
