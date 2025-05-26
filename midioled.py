@@ -16,6 +16,29 @@ device = ssd1306(serial)
 font_path = os.path.expanduser("~/midihub/font/miniwi-8.bdf")
 font = ImageFont.load(font_path)
 
+# Monitor device list
+TRIGGER_FILE = "/tmp/midihub_devices.trigger"
+last_mtime = None
+
+def check_for_device_update():
+    global last_mtime
+    try:
+        mtime = os.path.getmtime(TRIGGER_FILE)
+        if last_mtime is None or mtime != last_mtime:
+            last_mtime = mtime
+            return True
+    except FileNotFoundError:
+        pass
+    return False
+
+while True:
+    if check_for_device_update():
+        # Reload devices
+        state['devices'] = get_input_names()
+        state['show_devices'] = True
+        time.sleep(2)
+        state['show_devices'] = False
+
 # Shared state
 state = {
     'channel': None,
