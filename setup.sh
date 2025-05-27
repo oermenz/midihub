@@ -27,16 +27,8 @@ for SERVICE in midihub.service midioled.service midihub.target; do
 done
 
 echo "==> Copying udev rules for MIDI devices..."
-UDEV_RULES_SRC="$REPO_DIR/services"
-UDEV_RULES_DST="/etc/udev/rules.d"
-
-for RULE in 33-midiusb.rules 33-midibt.rules; do
-    if [ -f "$UDEV_RULES_SRC/$RULE" ]; then
-        sudo cp "$UDEV_RULES_SRC/$RULE" "$UDEV_RULES_DST/"
-        echo "  - Copied $RULE"
-    else
-        echo "  - Warning: $RULE not found in $UDEV_RULES_SRC"
-    fi
+for RULES in 11-midihub.rules; do
+    sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
 done
 
 echo "==> Reloading udev rules..."
