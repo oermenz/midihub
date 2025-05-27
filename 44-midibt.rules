@@ -1,2 +1,0 @@
-ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="card*", \
-    RUN+="/usr/bin/pkill -SIGHUP -f midihub.py"
