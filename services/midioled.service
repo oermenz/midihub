@@ -1,14 +1,15 @@
 [Unit]
 Description=Midihub OLED Display Service
 After=network.target
+PartOf=midihub.target
 
 [Service]
 Type=simple
 User=oermens
-WorkingDirectory=%h/midihub
-ExecStart=%h/midihub/venv/bin/python3 %h/midihub/midioled.py
+WorkingDirectory=/home/oermens/midihub
+ExecStart=/home/oermens/midihub/venv/bin/python3 /home/oermens/midihub/midioled.py
 Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=midihub.target
