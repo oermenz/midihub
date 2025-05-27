@@ -1,1 +1,3 @@
-ACTION=="add|remove", SUBSYSTEM=="usb", DRIVER=="usb", RUN+="/usr/local/bin/midihub.py"
+# Trigger when a USB MIDI device is added or removed
+ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="card*", \
+    RUN+="/usr/bin/pkill -SIGHUP -f midihub.py"
