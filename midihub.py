@@ -21,7 +21,6 @@ def get_midi_ports():
     output = run_command("aconnect -i -l")
     ports = []
     names = []
-
     for line in output.splitlines():
         match = re.search(r"client (\d+): '([^']+)'", line)
         if match:
@@ -30,7 +29,6 @@ def get_midi_ports():
             if port != "0" and "Through" not in name:
                 ports.append(port)
                 names.append(name)
-
     return ports, names
 
 def connect_all_ports(ports):
@@ -43,6 +41,7 @@ def main():
     disconnect_all_midi()
     ports, names = get_midi_ports()
     connect_all_ports(ports)
+    notify_device_change()
 
 if __name__ == "__main__":
     main()
