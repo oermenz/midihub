@@ -1,3 +1,2 @@
-# Trigger when a Bluetooth MIDI device is added or removed (adjust KERNEL/SUBSYSTEM if needed)
 ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="card*", \
     RUN+="/usr/bin/pkill -SIGHUP -f midihub.py"
