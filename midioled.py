@@ -37,7 +37,7 @@ state = {
 
 def note_number_to_pitch(note_number):
     notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    octave = (note_number // 12) - 1
+    octave = (note_number // 12)
     note = notes[note_number % 12]
     return f"{note}{octave}"
 
