@@ -73,5 +73,5 @@ systemctl restart midihub.target
 echo "✅ Setup complete. A reboot is recommended."
 read -p "Would you like to reboot now? (y/n): " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
-  reboot
+  reboot now
 fi
