@@ -14,30 +14,13 @@ device = ssd1306(serial)
 
 # Load default font
 font_path = os.path.expanduser("~/midihub/font/miniwi-8.bdf")
-font = ImageFont.load(font_path)
+try:
+    font = ImageFont.load(font_path)
+except Exception:
+    font = None
 
-# Monitor device list
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-last_mtime = None
-
-def check_for_device_update():
-    global last_mtime
-    try:
-        mtime = os.path.getmtime(TRIGGER_FILE)
-        if last_mtime is None or mtime != last_mtime:
-            last_mtime = mtime
-            return True
-    except FileNotFoundError:
-        pass
-    return False
-
-while True:
-    if check_for_device_update():
-        # Reload devices
-        state['devices'] = get_input_names()
-        state['show_devices'] = True
-        time.sleep(2)
-        state['show_devices'] = False
+DEVICE_DISPLAY_TIME = 2  # seconds
 
 # Shared state
 state = {
@@ -48,18 +31,27 @@ state = {
     'bpm': None,
     'show_devices': False,
     'devices': [],
-    'last_clock_times': deque(maxlen=24)
+    'last_clock_times': deque(maxlen=24),
+    'last_device_update': 0
 }
 
 def note_number_to_pitch(note_number):
-    """Convert MIDI note number to pitch notation."""
     notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     octave = (note_number // 12) - 1
     note = notes[note_number % 12]
     return f"{note}{octave}"
 
+def check_for_device_update():
+    try:
+        mtime = os.path.getmtime(TRIGGER_FILE)
+        if mtime != state.get('last_device_update', 0):
+            state['last_device_update'] = mtime
+            return True
+    except FileNotFoundError:
+        pass
+    return False
+
 def update_display():
-    """Update the OLED display based on the current state."""
     while True:
         with canvas(device) as draw:
             if state['show_devices']:
@@ -74,20 +66,36 @@ def update_display():
         time.sleep(0.1)
 
 def monitor_midi():
-    """Monitor MIDI messages and update the state accordingly."""
-    input_names = get_input_names()
-    state['devices'] = input_names
-    state['show_devices'] = True
-    time.sleep(2)
-    state['show_devices'] = False
-
-    inputs = [open_input(name) for name in input_names]
-
+    inputs = []
+    last_device_list = []
     while True:
+        # Device change detection
+        if check_for_device_update() or not inputs:
+            # Refresh list of devices and input ports
+            current_devices = get_input_names()
+            if current_devices != last_device_list:
+                last_device_list = list(current_devices)
+                state['devices'] = current_devices
+                state['show_devices'] = True
+                # Close old ports and open new
+                for inp in inputs:
+                    inp.close()
+                inputs = [open_input(name) for name in current_devices]
+                # Show device list for specified time
+                shown_at = time.time()
+            else:
+                shown_at = None
+
+        # Handle display timeout for devices
+        if state['show_devices']:
+            if shown_at and (time.time() - shown_at > DEVICE_DISPLAY_TIME):
+                state['show_devices'] = False
+
+        # Read MIDI input
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on':
-                    state['channel'] = msg.channel + 1  # MIDI channels are 1-based
+                    state['channel'] = msg.channel + 1
                     state['note'] = note_number_to_pitch(msg.note)
                 elif msg.type == 'control_change':
                     state['channel'] = msg.channel + 1
@@ -97,9 +105,10 @@ def monitor_midi():
                     now = time.time()
                     state['last_clock_times'].append(now)
                     if len(state['last_clock_times']) >= 2:
-                        intervals = [t2 - t1 for t1, t2 in zip(state['last_clock_times'], list(state['last_clock_times'])[1:])]
+                        intervals = [
+                            t2 - t1 for t1, t2 in zip(state['last_clock_times'], list(state['last_clock_times'])[1:])
+                        ]
                         avg_interval = sum(intervals) / len(intervals)
-                        # MIDI clock sends 24 messages per quarter note
                         bpm = 60 / (avg_interval * 24)
                         state['bpm'] = round(bpm, 1)
         time.sleep(0.01)
