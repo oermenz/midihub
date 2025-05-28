@@ -5,6 +5,14 @@ import time
 import re
 import os
 
+# Debug udev tiggering
+with open("/tmp/udev_debug_env.txt", "a") as f:
+    f.write("---- EVENT ----\n")
+    for k, v in os.environ.items():
+        f.write(f"{k}={v}\n")
+    f.write("\n")
+# Debug udev triggering
+
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 
 def notify_device_change():
