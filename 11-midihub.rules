@@ -1,1 +1,1 @@
-ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/usr/bin/pkill -SIGHUP -f midihub.py"
+ACTION=="add|remove", SUBSYSTEM=="sound", ENV{ID_USB_INTERFACES}=="*010300*", RUN+="/usr/bin/python3 /home/oermens/midihub/midihub.py"
