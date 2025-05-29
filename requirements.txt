@@ -1,4 +1,5 @@
 mido
+music21
 Pillow
 luma.oled
 python-rtmidi
