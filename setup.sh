@@ -2,12 +2,13 @@
 
 set -e
 
-# Variables
+# VARIABLES
 USER_NAME="oermens"
 USER_HOME="/home/$USER_NAME"
 REPO_DIR="$USER_HOME/midihub"
 VENV_DIR="$REPO_DIR/venv"
 
+# VENV
 echo "==> Creating Python virtual environment..."
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
@@ -25,6 +26,7 @@ if [ -f "$REPO_DIR/requirements.txt" ]; then
     pip install -r "$REPO_DIR/requirements.txt"
 fi
 
+# COPY FILES
 echo "==> Copying service and target files..."
 for SERVICE in midihub.service midioled.service midihub.target; do
     sudo cp "$REPO_DIR/services/$SERVICE" /etc/systemd/system/
@@ -35,6 +37,7 @@ for RULES in 11-midihub.rules; do
     sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
 done
 
+# RELOAD/ENABLE
 echo "==> Reloading udev rules..."
 sudo udevadm control --reload-rules
 sudo udevadm trigger
@@ -45,6 +48,7 @@ sudo systemctl daemon-reload
 echo "==> Enabling services and target for user: $USER_NAME"
 sudo systemctl enable midihub.service midioled.service midihub.target
 
+# FINISH
 echo "==> Setup complete."
 echo "You can now start the full stack with:"
 echo "sudo systemctl start midihub.target"
