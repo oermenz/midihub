@@ -8,6 +8,10 @@ USER_HOME="/home/$USER_NAME"
 REPO_DIR="$USER_HOME/midihub"
 VENV_DIR="$REPO_DIR/venv"
 
+# ENABLE i2C + UART
+sudo raspi-config nonint do_i2c 0
+sudo raspi-config nonint do_serial 1
+
 # VENV
 echo "==> Creating Python virtual environment..."
 python3 -m venv "$VENV_DIR"
@@ -49,6 +53,11 @@ echo "==> Enabling services and target for user: $USER_NAME"
 sudo systemctl enable midihub.service midioled.service midihub.target
 
 # FINISH
-echo "==> Setup complete."
-echo "You can now start the full stack with:"
-echo "sudo systemctl start midihub.target"
+echo
+read -p "==> Setup complete. Reboot now? [y/N] " response
+if [[ "$response" =~ ^[Yy]$ ]]; then
+    echo "Rebooting..."
+    sudo reboot now
+else
+    echo "==> Reboot skipped."
+fi
