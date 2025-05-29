@@ -3,7 +3,7 @@ Description=Midihub MIDI Routing Service
 After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=oermens
 WorkingDirectory=/home/oermens/midihub
 ExecStart=/home/oermens/midihub/venv/bin/python3 /home/oermens/midihub/midihub.py
