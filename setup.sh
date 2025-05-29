@@ -12,12 +12,16 @@ echo "==> Creating Python virtual environment..."
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
-echo "==> Installing Python requirements..."
-pip install --upgrade pip
+# SYSTEM DEPENDENCIES
 if [ -f "$REPO_DIR/dependencies.txt" ]; then
-    pip install -r "$REPO_DIR/dependencies.txt"
+    echo "==> Installing system dependencies..."
+    sudo apt update
+    xargs -a "$REPO_DIR/dependencies.txt" sudo apt install -y
 fi
+
+# PYTHON DEPENDENCIES
 if [ -f "$REPO_DIR/requirements.txt" ]; then
+    echo "==> Installing Python requirements..."
     pip install -r "$REPO_DIR/requirements.txt"
 fi
 
