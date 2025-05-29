@@ -1,1 +1,1 @@
-ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*010300*", RUN+="/usr/bin/python3 /home/oermens/midihub/midihub.py"
+ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*010300*", RUN+="/bin/systemctl start midihub.service"
