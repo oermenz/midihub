@@ -7,7 +7,7 @@ from mido import get_input_names, open_input
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
-from PIL import Image, ImageFont
+from PIL import Image, ImageFont, ImageDraw
 from music21 import note as m21note, chord as m21chord
 
 DISPLAY_WIDTH = 128
@@ -48,8 +48,6 @@ def debug_draw_font(font, font_name="font_info"):
         debug_print(f"Saved PNG test output: {outname}")
     except Exception as e:
         debug_print(f"Failed to draw debug PNG for {font_name}: {e}")
-
-from PIL import ImageDraw  # Must import after PIL.ImageFont
 
 debug_draw_font(font_info, "font_info")
 debug_draw_font(font_device, "font_device")
@@ -180,9 +178,9 @@ def get_text_size(text, font):
 
 def draw_centered_text(draw, x, y, w, h, text, font, fill):
     try:
-        ascent, descent = font.getmetrics()
+        # Use only text height for vertical centering, compatible with bitmap fonts
         text_w, text_h = get_text_size(text, font)
-        text_y = y + (h - (ascent + descent)) // 2
+        text_y = y + (h - text_h) // 2
         debug_print(f"draw_centered_text: '{text}' at ({x},{text_y}) size {w}x{h}")
         draw.text((x + (w - text_w) // 2, text_y), text, font=font, fill=fill)
     except Exception as e:
