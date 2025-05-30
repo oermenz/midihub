@@ -163,8 +163,18 @@ def draw_toprow(draw, y, state):
     flash_until = state.get('toprow_values_flash_until', {})
     padd = 2
     sep = 2
-    ascent, descent = font.getmetrics()
-    maxh = ascent + descent
+
+    # Calculate the maximum height (label/value) for all pairs
+    heights = []
+    for label, value in zip(labels, values):
+        lw, lh = get_text_size(label, font)
+        vw, vh = get_text_size(value, font)
+        heights.extend([lh, vh])
+    maxh = max(heights)
+    # Use the same y offset for all label/value pairs, so they align
+    baseline_y = y
+
+    # Precompute widths for all label-value pairs
     parts = []
     for label, value in zip(labels, values):
         lw, lh = get_text_size(label, font)
@@ -173,26 +183,30 @@ def draw_toprow(draw, y, state):
     total_w = sum(lw + padd + vw for _, lw, _, _, vw, _ in parts) + sep * (len(parts) - 1)
     x = (DISPLAY_WIDTH - total_w) // 2
     now = time.time()
+
     for i, (label, lw, lh, value, vw, vh) in enumerate(parts):
-        label_y = y + (maxh - lh) // 2
+        # Vertically center both label and value in maxh
+        label_y = baseline_y + (maxh - lh) // 2
+        value_y = baseline_y + (maxh - vh) // 2
         draw.text((x, label_y), label, font=font, fill=255)
         x += lw + padd
         invert = now < flash_until.get(['ch','cc','val'][i], 0)
         if invert:
-            draw.rectangle((x, y, x + vw, y + maxh), outline=255, fill=255)
-            draw_centered_text(draw, x, y, vw, maxh, value, font, fill=0)
+            draw.rectangle((x, baseline_y, x + vw, baseline_y + maxh), outline=255, fill=255)
+            draw_centered_text(draw, x, baseline_y, vw, maxh, value, font, fill=0)
         else:
-            draw_centered_text(draw, x, y, vw, maxh, value, font, fill=255)
+            draw_centered_text(draw, x, baseline_y, vw, maxh, value, font, fill=255)
         x += vw + sep
 
 def draw_bubble_notes(draw, region_y, bubbles, font, region_height):
-    padd_x = 3
-    padd_y = 4
+    padd_x = 2
+    padd_y = 2
     spacing = 3
     if not bubbles:
         return
-    ascent, descent = font.getmetrics()
-    text_height = ascent + descent
+    # Use max text height from all note names
+    text_heights = [get_text_size(b['name'], font)[1] for b in bubbles]
+    text_height = max(text_heights)
     bubble_h = text_height + padd_y * 2
     bubble_w = []
     note_names = [b['name'] for b in bubbles]
@@ -217,8 +231,8 @@ def draw_bubble_notes(draw, region_y, bubbles, font, region_height):
 def update_display():
     chord_font = font_info
     chord_text_h = get_text_size("A", chord_font)[1]
-    chord_fixed_y = DISPLAY_HEIGHT - chord_text_h
-    topline_h = get_text_size("A", font_info)[1]
+    chord_fixed_y = DISPLAY_HEIGHT - chord_text_h # *anchor to the very bottom*
+    topline_h = max(get_text_size(label, font_info)[1] for label in ["CH", "CC", "VAL"])
     topline_y = 0
 
     def get_bubbles_region():
@@ -284,7 +298,6 @@ def update_display():
                     draw.text((dash_x, dash_y), "--", font=bubble_font, fill=128)
                 # Chord name
                 chord_to_display = ""
-                # Show chord for held notes (if any), else for most recent latched chord
                 chord_notes = set(display_notes)
                 if len(chord_notes) >= 3:
                     chord_str, root, quality, bass, unknown = detect_chord(chord_notes)
@@ -327,8 +340,6 @@ def monitor_midi():
     prev_ch = None
     note_timestamps = {}
     prev_held_notes = set()
-    # For chord latching window
-    last_release_times = {}
     while True:
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
