@@ -20,17 +20,25 @@ FONT_INFO = os.path.join(FONT_DIR, "RobotoMono-VariableFont_wght.ttf")
 def load_fonts():
     try:
         font_device = ImageFont.load(FONT_DEVICE_LIST)
-    except Exception:
-        font_device = None
-    try:
-        font_info = ImageFont.truetype(FONT_INFO, 14)
-    except Exception:
-        font_info = None
-    try:
-        font_info_small = ImageFont.truetype(FONT_INFO, 11)
-    except Exception:
-        font_info_small = None
-    return font_device, font_info, font_info_small
+        print("Loaded miniwi-8.bdf successfully!")
+    except Exception as e:
+        print(f"Failed to load miniwi-8.bdf: {e}")
+        font_device = ImageFont.load_default()
+
+#def load_fonts():
+#    try:
+#        font_device = ImageFont.load(FONT_DEVICE_LIST)
+#    except Exception:
+#        font_device = None
+#    try:
+#        font_info = ImageFont.truetype(FONT_INFO, 14)
+#    except Exception:
+#        font_info = None
+#    try:
+#        font_info_small = ImageFont.truetype(FONT_INFO, 11)
+#    except Exception:
+#        font_info_small = None
+#    return font_device, font_info, font_info_small
 
 font_device, font_info, font_info_small = load_fonts()
 
