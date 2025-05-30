@@ -35,7 +35,7 @@ DEVICE_DISPLAY_TIME = 6  # seconds
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 NOTE_DEBOUNCE_TIME = 0.03
-NOTE_LATCH_WINDOW = 0.2
+CHORD_RELEASE_WINDOW = 0.1  # 100ms window for chord latching
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
@@ -67,6 +67,10 @@ state = {
     'last_latched_time': 0,
     'last_chord_name': '',
     'display_update_event': threading.Event(),
+    # Chord release window state
+    'chord_release_pending': False,
+    'chord_release_start_time': 0,
+    'chord_release_notes': set(),
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -269,24 +273,24 @@ def update_display():
                         if y < DISPLAY_HEIGHT:
                             draw.text((0, y), name, font=font, fill=255)
                 else:
-                    total_scroll = n_devices - MAX_DEVICE_LINES
+                    # Smooth pixel scrolling logic
+                    total_lines = n_devices
+                    visible_lines = MAX_DEVICE_LINES
+                    total_scroll_pixels = line_h * (total_lines - visible_lines)
                     scroll_period = DEVICE_DISPLAY_TIME - DEVICE_SCROLL_START_DELAY - DEVICE_SCROLL_END_HOLD
                     elapsed = (time.time() - state['device_scroll_time'])
                     if elapsed < DEVICE_SCROLL_START_DELAY:
-                        first_line = 0
+                        pixel_offset = 0
                     elif elapsed >= DEVICE_SCROLL_START_DELAY + scroll_period:
-                        first_line = total_scroll
+                        pixel_offset = total_scroll_pixels
                     else:
                         scroll_elapsed = elapsed - DEVICE_SCROLL_START_DELAY
-                        scroll_lines = (scroll_elapsed / scroll_period) * total_scroll
-                        first_line = int(scroll_lines)
-                    # Display window: always up to MAX_DEVICE_LINES, never more, and never go out of range
-                    for i in range(MAX_DEVICE_LINES):
-                        idx = first_line + i
-                        if idx < n_devices:
-                            y = i * line_h
-                            if 0 <= y < DISPLAY_HEIGHT:
-                                draw.text((0, y), devices[idx], font=font, fill=255)
+                        pixel_offset = int((scroll_elapsed / scroll_period) * total_scroll_pixels)
+                    for i in range(visible_lines):
+                        idx = i + (pixel_offset // line_h)
+                        y = (i * line_h) - (pixel_offset % line_h)
+                        if 0 <= idx < n_devices and 0 <= y < DISPLAY_HEIGHT:
+                            draw.text((0, y), devices[idx], font=font, fill=255)
             else:
                 draw_toprow(draw, topline_y, state)
                 bubble_font = fonts['bubble']
@@ -337,7 +341,7 @@ def monitor_midi():
     shown_at = None
     prev_ch = None
     note_timestamps = {}
-    prev_held_notes = set()
+
     while True:
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
@@ -357,7 +361,7 @@ def monitor_midi():
                 state['display_update_event'].set()
 
         now = time.time()
-        note_changed = False
+        midi_event = False
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
@@ -365,14 +369,26 @@ def monitor_midi():
                         state['channel'] = msg.channel + 1
                         state['held_notes'].add(msg.note)
                         state['released_notes'].pop(msg.note, None)
-                        note_changed = True
+                        midi_event = True
+                        # If a new note is played during a chord release window, cancel the pending latch
+                        if state['chord_release_pending']:
+                            state['chord_release_pending'] = False
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
                     if debounce_note_event(msg.note, now, note_timestamps):
                         state['channel'] = msg.channel + 1
                         if msg.note in state['held_notes']:
                             state['held_notes'].remove(msg.note)
                         state['released_notes'][msg.note] = now
-                        note_changed = True
+                        midi_event = True
+                        # Start chord release window if not already started, and some notes were held
+                        if not state['chord_release_pending'] and len(state['held_notes']) > 0:
+                            state['chord_release_pending'] = True
+                            state['chord_release_start_time'] = now
+                            state['chord_release_notes'] = set(state['held_notes'])
+                        # If all notes are released (held_notes is now empty), latch immediately
+                        elif not state['chord_release_pending'] and len(state['held_notes']) == 0:
+                            state['last_latched_notes'] = set([msg.note])
+                            state['last_latched_time'] = now
                 elif msg.type == 'control_change':
                     state['channel'] = msg.channel + 1
                     if state['cc'] != msg.control:
@@ -385,18 +401,18 @@ def monitor_midi():
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
-        # Robust latching: latch all notes that were held just before the last note is released!
-        if note_changed:
-            if len(state['held_notes']) == 0 and len(prev_held_notes) > 0:
-                state['last_latched_notes'] = set(prev_held_notes)
+        # Handle chord release window
+        if state['chord_release_pending']:
+            if now - state['chord_release_start_time'] >= CHORD_RELEASE_WINDOW or len(state['held_notes']) == 0:
+                # Latch the notes that were held at the start of the window
+                state['last_latched_notes'] = set(state['chord_release_notes'])
                 state['last_latched_time'] = now
-            elif len(state['held_notes']) > 0:
-                state['last_latched_notes'] = set()
-                state['last_latched_time'] = 0
-            prev_held_notes = set(state['held_notes'])
+                state['chord_release_pending'] = False
+                state['chord_release_notes'] = set()
+                state['display_update_event'].set()
+
+        if midi_event:
             state['display_update_event'].set()
-        else:
-            prev_held_notes = set(state['held_notes'])
         time.sleep(0.01)
 
 if __name__ == "__main__":
