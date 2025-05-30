@@ -13,11 +13,9 @@ from music21 import note as m21note, chord as m21chord
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
 
-# Font paths
 FONT_DIR = os.path.expanduser("~/midihub/fonts")
 FONT_INFO = os.path.join(FONT_DIR, "RobotoMono-VariableFont_wght.ttf")
 
-# Font loading: Use TTF for info, default for device list
 def load_fonts():
     try:
         font_info = ImageFont.truetype(FONT_INFO, 14)
@@ -33,9 +31,9 @@ def load_fonts():
 font_device, font_info, font_info_small = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 5      # seconds
+DEVICE_DISPLAY_TIME = 5
 NOTE_DEBOUNCE_TIME = 0.03
-NOTE_LATCH_WINDOW = 0.2      # seconds, for grouping note releases
+NOTE_LATCH_WINDOW = 0.2
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
@@ -64,7 +62,6 @@ state = {
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
     'bubble_latched_notes': [],
-    # For improved note latching
     'pending_latch_notes': set(),
     'pending_latch_time': 0,
 }
@@ -138,9 +135,8 @@ def filter_device_names(devices):
     for name in devices:
         if "Through" in name:
             continue
-        # Remove port info after ":" and trailing numbers/ids
         base = name.split(":")[0].strip()
-        base = base.split("[")[0].strip()  # Remove [bracketed] info if present
+        base = base.split("[")[0].strip()
         filtered.append(base)
     return filtered
 
@@ -154,8 +150,8 @@ def get_text_size(text, font):
 def draw_centered_text(draw, x, y, w, h, text, font, fill):
     ascent, descent = font.getmetrics()
     text_w, text_h = get_text_size(text, font)
-    # Vertically center using ascent and descent
-    text_y = y + (h - (ascent + descent)) // 2
+    # Vertically center using ascent and descent if available
+    text_y = y + (h - text_h) // 2
     draw.text((x + (w - text_w) // 2, text_y), text, font=font, fill=fill)
 
 def draw_toprow(draw, y, state):
@@ -163,24 +159,22 @@ def draw_toprow(draw, y, state):
     cc = str(state['cc']) if state['cc'] is not None else '-'
     val = str(state['cc_val']) if state['cc_val'] is not None else '-'
     font = font_info
-    labels = ['CH', 'CC', 'VAL']  # No colons
+    labels = ['CH', 'CC', 'VAL']
     values = [ch, cc, val]
     flash_until = state.get('toprow_values_flash_until', {})
     padd = 2
     sep = 2
     parts = []
+    # For each label-value, compute max height for proper vertical alignment
     for label, value in zip(labels, values):
         lw, lh = get_text_size(label, font)
         vw, vh = get_text_size(value, font)
-        # Use the max height for both label and value for vertical alignment
         maxh = max(lh, vh)
         parts.append((label, lw, lh, value, vw, vh, maxh))
     total_w = sum(lw + padd + vw for _, lw, _, _, vw, _, _ in parts) + sep * (len(parts) - 1)
     x = (DISPLAY_WIDTH - total_w) // 2
-
     now = time.time()
     for i, (label, lw, lh, value, vw, vh, maxh) in enumerate(parts):
-        # Vertically align both label and value
         label_y = y + (maxh - lh) // 2
         value_y = y + (maxh - vh) // 2
         draw.text((x, label_y), label, font=font, fill=255)
@@ -193,18 +187,21 @@ def draw_toprow(draw, y, state):
             draw_centered_text(draw, x, y, vw, maxh, value, font, fill=255)
         x += vw + sep
 
-def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set):
+def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set, region_height):
     padd_x = 2
     padd_y = 1
     spacing = 2
-    # Use max text height for all bubbles for consistent alignment
-    bubble_h = get_text_size("A", font)[1] + padd_y * 2
+    # Compute bubble heights and widths for all notes
+    max_text_h = max(get_text_size(name, font)[1] for name in note_names) if note_names else 0
+    bubble_h = max_text_h + padd_y * 2
     bubble_w = []
     for name in note_names:
         w, h = get_text_size(name, font)
         bubble_w.append(w + 2 * padd_x)
     total_w = sum(bubble_w) + spacing * (len(note_names) - 1)
     x = max(0, (DISPLAY_WIDTH - total_w) // 2)
+    # Vertically center bubbles in the region
+    y_centered = y + (region_height - bubble_h) // 2
     for i, name in enumerate(note_names):
         w, h = get_text_size(name, font)
         bw = bubble_w[i]
@@ -214,19 +211,33 @@ def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set):
             note_val = None
         invert = note_val in held_set
         if invert:
-            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=5, outline=255, fill=255)
-            draw_centered_text(draw, x, y, bw, bubble_h, name, font, fill=0)
+            draw.rounded_rectangle((x, y_centered, x + bw, y_centered + bubble_h), radius=5, outline=255, fill=255)
+            draw_centered_text(draw, x, y_centered, bw, bubble_h, name, font, fill=0)
         else:
-            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=5, outline=255, fill=0)
-            draw_centered_text(draw, x, y, bw, bubble_h, name, font, fill=255)
+            draw.rounded_rectangle((x, y_centered, x + bw, y_centered + bubble_h), radius=5, outline=255, fill=0)
+            draw_centered_text(draw, x, y_centered, bw, bubble_h, name, font, fill=255)
         x += bw + spacing
 
 def update_display():
-    chord_fixed_y = DISPLAY_HEIGHT - get_text_size("A", font_info)[1] - 2 - 8
+    # Chord name at bottom, lowered by 3 pixels
+    chord_font = font_info
+    chord_text_h = get_text_size("A", chord_font)[1]
+    chord_fixed_y = DISPLAY_HEIGHT - chord_text_h - 3
+
+    topline_h = get_text_size("A", font_info)[1]
+    topline_y = 0
+
+    # Bubbles region: between topline and chord, with 2px margin from each
+    def get_bubbles_region():
+        top = topline_y + topline_h + 2
+        bottom = chord_fixed_y - 2
+        region_y = top
+        region_h = max(0, bottom - top)
+        return region_y, region_h
+
     while True:
         with canvas(device) as draw:
             if state['show_devices']:
-                # Device list: scroll or static display
                 devices = filter_device_names(state['devices'])
                 font = font_device
                 line_h = get_text_size("A", font)[1] + 2
@@ -250,8 +261,8 @@ def update_display():
                             if 0 <= y < DISPLAY_HEIGHT:
                                 draw.text((0, y), devices[idx], font=font, fill=255)
             else:
-                draw_toprow(draw, 0, state)
-                # Notes
+                draw_toprow(draw, topline_y, state)
+                # Notes/bubbles
                 if state['active_notes']:
                     notes_to_display = [midi_note_to_name(n) for n in sorted(state['active_notes'])]
                     note_vals = sorted(state['active_notes'])
@@ -265,17 +276,16 @@ def update_display():
                     note_vals = []
                     held_set = set()
                 bubble_font = font_info
-                bubble_h = get_text_size("A", bubble_font)[1] + 2
-                toprow_height = get_text_size("A", font_info)[1]
-                # As close as possible but not touching: 2px gap
-                bubbles_y = toprow_height + 2
+                region_y, region_h = get_bubbles_region()
                 if notes_to_display:
-                    draw_bubble_notes(draw, bubbles_y, notes_to_display, note_vals,
-                                     font=bubble_font, held_set=held_set)
+                    draw_bubble_notes(draw, region_y, notes_to_display, note_vals, font=bubble_font, held_set=held_set, region_height=region_h)
                 else:
-                    draw.text((DISPLAY_WIDTH // 2 - 10, bubbles_y), "--", font=bubble_font, fill=128)
-                # Chord name, always at static vertical position
-                chord_font = font_info
+                    # Center "--" in the bubbles region
+                    dash_w, dash_h = get_text_size("--", bubble_font)
+                    dash_x = (DISPLAY_WIDTH - dash_w) // 2
+                    dash_y = region_y + (region_h - dash_h) // 2
+                    draw.text((dash_x, dash_y), "--", font=bubble_font, fill=128)
+                # Chord name
                 chord_to_display = ""
                 if len(note_vals) >= 3 and state['chord_name']:
                     chord_to_display = state['chord_name']
@@ -308,7 +318,6 @@ def monitor_midi():
     shown_at = None
     prev_ch = None
     prev_active_notes = set()
-    # For improved note latching
     pending_latch_notes = set()
     pending_latch_time = None
     while True:
@@ -357,24 +366,20 @@ def monitor_midi():
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
-        # Improved latching logic: wait up to 200ms after the last note_off to latch the last non-empty set
+        # Improved latching logic
         if note_changed:
             if note_off_this_cycle:
                 if not state['active_notes']:
-                    # All notes released, start pending latch window
                     pending_latch_notes = set(prev_active_notes)
                     pending_latch_time = now
                 else:
-                    # Notes still held, reset pending
                     pending_latch_notes = set()
                     pending_latch_time = None
             else:
-                # Any note_on cancels pending
                 pending_latch_notes = set()
                 pending_latch_time = None
             prev_active_notes = set(state['active_notes'])
 
-        # Check for pending latch
         if pending_latch_time and (now - pending_latch_time > NOTE_LATCH_WINDOW):
             if pending_latch_notes:
                 state['bubble_latched_notes'] = sorted(pending_latch_notes)
@@ -394,7 +399,6 @@ def monitor_midi():
             pending_latch_notes = set()
             pending_latch_time = None
 
-        # Chord detection on note_on
         if note_changed and state['active_notes']:
             sorted_notes = sorted(state['active_notes'])
             state['bubble_latched_notes'] = []
