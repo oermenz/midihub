@@ -25,7 +25,7 @@ def load_fonts():
         font_info_small = ImageFont.truetype(FONT_INFO, 11)
     except Exception:
         font_info_small = font_info
-    font_device = ImageFont.load_default()  # Always use default for device list
+    font_device = ImageFont.load_default()
     return font_device, font_info, font_info_small
 
 font_device, font_info, font_info_small = load_fonts()
@@ -34,6 +34,7 @@ TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 DEVICE_DISPLAY_TIME = 5
 NOTE_DEBOUNCE_TIME = 0.03
 NOTE_LATCH_WINDOW = 0.2
+NOTE_LATCH_SHOW = 2.0
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
@@ -41,8 +42,6 @@ state = {
     'channel': None,
     'cc': None,
     'cc_val': None,
-    'active_notes': set(),
-    'note_timestamps': {},
     'show_devices': False,
     'devices': [],
     'last_device_update': 0,
@@ -61,9 +60,12 @@ state = {
     'toprow_last': {'ch': None, 'cc': None, 'val': None},
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
-    'bubble_latched_notes': [],
-    'pending_latch_notes': set(),
-    'pending_latch_time': 0,
+    # New note state tracking
+    'held_notes': set(),
+    'released_notes': {},  # note -> release_time
+    'last_released_chord': set(),
+    'last_release_time': 0,
+    'last_latch_time': 0,
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -130,7 +132,6 @@ def check_for_device_update():
     return False
 
 def filter_device_names(devices):
-    # Show only the base name: strip after ":" or first space, and ignore "Through"
     filtered = []
     for name in devices:
         if "Through" in name:
@@ -148,9 +149,7 @@ def get_text_size(text, font):
         return (len(text) * 6, 10)
 
 def draw_centered_text(draw, x, y, w, h, text, font, fill):
-    ascent, descent = font.getmetrics()
     text_w, text_h = get_text_size(text, font)
-    # Vertically center using ascent and descent if available
     text_y = y + (h - text_h) // 2
     draw.text((x + (w - text_w) // 2, text_y), text, font=font, fill=fill)
 
@@ -164,19 +163,18 @@ def draw_toprow(draw, y, state):
     flash_until = state.get('toprow_values_flash_until', {})
     padd = 2
     sep = 2
+    ascent, descent = font.getmetrics()
+    maxh = ascent + descent
     parts = []
-    # For each label-value, compute max height for proper vertical alignment
     for label, value in zip(labels, values):
         lw, lh = get_text_size(label, font)
         vw, vh = get_text_size(value, font)
-        maxh = max(lh, vh)
-        parts.append((label, lw, lh, value, vw, vh, maxh))
-    total_w = sum(lw + padd + vw for _, lw, _, _, vw, _, _ in parts) + sep * (len(parts) - 1)
+        parts.append((label, lw, lh, value, vw, vh))
+    total_w = sum(lw + padd + vw for _, lw, _, _, vw, _ in parts) + sep * (len(parts) - 1)
     x = (DISPLAY_WIDTH - total_w) // 2
     now = time.time()
-    for i, (label, lw, lh, value, vw, vh, maxh) in enumerate(parts):
+    for i, (label, lw, lh, value, vw, vh) in enumerate(parts):
         label_y = y + (maxh - lh) // 2
-        value_y = y + (maxh - vh) // 2
         draw.text((x, label_y), label, font=font, fill=255)
         x += lw + padd
         invert = now < flash_until.get(['ch','cc','val'][i], 0)
@@ -187,29 +185,27 @@ def draw_toprow(draw, y, state):
             draw_centered_text(draw, x, y, vw, maxh, value, font, fill=255)
         x += vw + sep
 
-def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set, region_height):
-    padd_x = 2
-    padd_y = 1
-    spacing = 2
-    # Compute bubble heights and widths for all notes
-    max_text_h = max(get_text_size(name, font)[1] for name in note_names) if note_names else 0
-    bubble_h = max_text_h + padd_y * 2
+def draw_bubble_notes(draw, region_y, bubbles, font, region_height):
+    padd_x = 3
+    padd_y = 4
+    spacing = 3
+    if not bubbles:
+        return
+    ascent, descent = font.getmetrics()
+    text_height = ascent + descent
+    bubble_h = text_height + padd_y * 2
     bubble_w = []
+    note_names = [b['name'] for b in bubbles]
     for name in note_names:
         w, h = get_text_size(name, font)
         bubble_w.append(w + 2 * padd_x)
     total_w = sum(bubble_w) + spacing * (len(note_names) - 1)
     x = max(0, (DISPLAY_WIDTH - total_w) // 2)
-    # Vertically center bubbles in the region
-    y_centered = y + (region_height - bubble_h) // 2
-    for i, name in enumerate(note_names):
-        w, h = get_text_size(name, font)
+    y_centered = region_y + (region_height - bubble_h) // 2
+    for i, b in enumerate(bubbles):
+        name = b['name']
         bw = bubble_w[i]
-        try:
-            note_val = held_notes[i]
-        except IndexError:
-            note_val = None
-        invert = note_val in held_set
+        invert = b['invert']
         if invert:
             draw.rounded_rectangle((x, y_centered, x + bw, y_centered + bubble_h), radius=5, outline=255, fill=255)
             draw_centered_text(draw, x, y_centered, bw, bubble_h, name, font, fill=0)
@@ -219,15 +215,12 @@ def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set, region_he
         x += bw + spacing
 
 def update_display():
-    # Chord name at bottom, lowered by 3 pixels
     chord_font = font_info
     chord_text_h = get_text_size("A", chord_font)[1]
-    chord_fixed_y = DISPLAY_HEIGHT - chord_text_h - 3
-
+    chord_fixed_y = DISPLAY_HEIGHT - chord_text_h
     topline_h = get_text_size("A", font_info)[1]
     topline_y = 0
 
-    # Bubbles region: between topline and chord, with 2px margin from each
     def get_bubbles_region():
         top = topline_y + topline_h + 2
         bottom = chord_fixed_y - 2
@@ -236,6 +229,24 @@ def update_display():
         return region_y, region_h
 
     while True:
+        now = time.time()
+        # Gather bubbles to display: held notes (invert), plus latched notes (not invert)
+        held_notes = state['held_notes']
+        # Remove released notes older than NOTE_LATCH_SHOW
+        to_remove = [n for n, t in state['released_notes'].items() if now - t > NOTE_LATCH_SHOW]
+        for n in to_remove:
+            del state['released_notes'][n]
+        # Latched notes: currently released (not held) and still in release window
+        latched_notes = set(state['released_notes'].keys()) - held_notes
+        # Display: held (inverted, sorted), then latched (not inverted, sorted)
+        display_notes = list(sorted(held_notes)) + list(sorted(latched_notes - held_notes))
+        display_bubbles = []
+        for n in display_notes:
+            display_bubbles.append({
+                'note': n,
+                'name': midi_note_to_name(n),
+                'invert': n in held_notes
+            })
         with canvas(device) as draw:
             if state['show_devices']:
                 devices = filter_device_names(state['devices'])
@@ -262,36 +273,33 @@ def update_display():
                                 draw.text((0, y), devices[idx], font=font, fill=255)
             else:
                 draw_toprow(draw, topline_y, state)
-                # Notes/bubbles
-                if state['active_notes']:
-                    notes_to_display = [midi_note_to_name(n) for n in sorted(state['active_notes'])]
-                    note_vals = sorted(state['active_notes'])
-                    held_set = set(note_vals)
-                elif state['bubble_latched_notes']:
-                    notes_to_display = [midi_note_to_name(n) for n in state['bubble_latched_notes']]
-                    note_vals = state['bubble_latched_notes']
-                    held_set = set()
-                else:
-                    notes_to_display = []
-                    note_vals = []
-                    held_set = set()
                 bubble_font = font_info
                 region_y, region_h = get_bubbles_region()
-                if notes_to_display:
-                    draw_bubble_notes(draw, region_y, notes_to_display, note_vals, font=bubble_font, held_set=held_set, region_height=region_h)
+                if display_bubbles:
+                    draw_bubble_notes(draw, region_y, display_bubbles, font=bubble_font, region_height=region_h)
                 else:
-                    # Center "--" in the bubbles region
                     dash_w, dash_h = get_text_size("--", bubble_font)
                     dash_x = (DISPLAY_WIDTH - dash_w) // 2
                     dash_y = region_y + (region_h - dash_h) // 2
                     draw.text((dash_x, dash_y), "--", font=bubble_font, fill=128)
                 # Chord name
                 chord_to_display = ""
-                if len(note_vals) >= 3 and state['chord_name']:
-                    chord_to_display = state['chord_name']
+                # Show chord for held notes (if any), else for most recent latched chord
+                chord_notes = set(display_notes)
+                if len(chord_notes) >= 3:
+                    chord_str, root, quality, bass, unknown = detect_chord(chord_notes)
+                    state['chord_name'] = chord_str
+                    state['chord_root'] = root
+                    state['chord_quality'] = quality
+                    state['chord_bass'] = bass
+                    state['unknown_chord'] = unknown
+                    if not unknown:
+                        state['last_chord_persist'] = chord_str
+                        state['last_chord_time'] = now
+                    chord_to_display = chord_str
                 elif state['last_chord_persist']:
                     chord_to_display = state['last_chord_persist']
-                chord_invert = (time.time() < state.get('last_chord_flash_until', 0))
+                chord_invert = (now < state.get('last_chord_flash_until', 0))
                 w, h = get_text_size(chord_to_display, chord_font)
                 chord_x = max(0, (DISPLAY_WIDTH - w) // 2)
                 if chord_to_display:
@@ -305,10 +313,10 @@ def update_display():
                         draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, chord_font, fill=255)
         time.sleep(0.04)
 
-def debounce_note_event(note, now):
-    last = state['note_timestamps'].get(note, 0)
-    if now - last > NOTE_DEBOUNCE_TIME:
-        state['note_timestamps'][note] = now
+def debounce_note_event(note, now, note_timestamps, debounce_time=NOTE_DEBOUNCE_TIME):
+    last = note_timestamps.get(note, 0)
+    if now - last > debounce_time:
+        note_timestamps[note] = now
         return True
     return False
 
@@ -317,9 +325,10 @@ def monitor_midi():
     last_device_list = []
     shown_at = None
     prev_ch = None
-    prev_active_notes = set()
-    pending_latch_notes = set()
-    pending_latch_time = None
+    note_timestamps = {}
+    prev_held_notes = set()
+    # For chord latching window
+    last_release_times = {}
     while True:
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
@@ -339,21 +348,22 @@ def monitor_midi():
 
         now = time.time()
         note_changed = False
-        note_off_this_cycle = False
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
-                    if debounce_note_event(msg.note, now):
+                    if debounce_note_event(msg.note, now, note_timestamps):
                         state['channel'] = msg.channel + 1
-                        state['active_notes'].add(msg.note)
+                        state['held_notes'].add(msg.note)
+                        # Remove from released notes, if present
+                        state['released_notes'].pop(msg.note, None)
                         note_changed = True
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
-                    if debounce_note_event(msg.note, now):
+                    if debounce_note_event(msg.note, now, note_timestamps):
                         state['channel'] = msg.channel + 1
-                        if msg.note in state['active_notes']:
-                            state['active_notes'].remove(msg.note)
+                        if msg.note in state['held_notes']:
+                            state['held_notes'].remove(msg.note)
+                        state['released_notes'][msg.note] = now
                         note_changed = True
-                        note_off_this_cycle = True
                 elif msg.type == 'control_change':
                     state['channel'] = msg.channel + 1
                     if state['cc'] != msg.control:
@@ -366,56 +376,16 @@ def monitor_midi():
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
-        # Improved latching logic
+        # Chord latching for short chords: if all notes released within 0.1s, latch all for 2s
         if note_changed:
-            if note_off_this_cycle:
-                if not state['active_notes']:
-                    pending_latch_notes = set(prev_active_notes)
-                    pending_latch_time = now
-                else:
-                    pending_latch_notes = set()
-                    pending_latch_time = None
-            else:
-                pending_latch_notes = set()
-                pending_latch_time = None
-            prev_active_notes = set(state['active_notes'])
-
-        if pending_latch_time and (now - pending_latch_time > NOTE_LATCH_WINDOW):
-            if pending_latch_notes:
-                state['bubble_latched_notes'] = sorted(pending_latch_notes)
-                if 3 <= len(pending_latch_notes) <= 6:
-                    chord_str, root, quality, bass, unknown = detect_chord(pending_latch_notes)
-                    state['chord_name'] = chord_str
-                    state['chord_root'] = root
-                    state['chord_quality'] = quality
-                    state['chord_bass'] = bass
-                    state['unknown_chord'] = unknown
-                    if not unknown:
-                        state['last_chord_persist'] = chord_str
-                        state['last_chord_time'] = now
-                else:
-                    state['chord_name'] = ""
-                    state['unknown_chord'] = False
-            pending_latch_notes = set()
-            pending_latch_time = None
-
-        if note_changed and state['active_notes']:
-            sorted_notes = sorted(state['active_notes'])
-            state['bubble_latched_notes'] = []
-            if 3 <= len(sorted_notes) <= 6:
-                chord_str, root, quality, bass, unknown = detect_chord(sorted_notes)
-                state['chord_name'] = chord_str
-                state['chord_root'] = root
-                state['chord_quality'] = quality
-                state['chord_bass'] = bass
-                state['unknown_chord'] = unknown
-                if not unknown:
-                    state['last_chord_persist'] = chord_str
-                    state['last_chord_time'] = now
-            else:
-                state['chord_name'] = ""
-                state['unknown_chord'] = False
-
+            if len(state['held_notes']) == 0 and len(prev_held_notes) > 0:
+                # All notes released, see if last releases happened together
+                now = time.time()
+                release_times = [state['released_notes'].get(n, now) for n in prev_held_notes]
+                if release_times and (max(release_times) - min(release_times) < 0.1):
+                    for n in prev_held_notes:
+                        state['released_notes'][n] = now
+        prev_held_notes = set(state['held_notes'])
         time.sleep(0.01)
 
 if __name__ == "__main__":
