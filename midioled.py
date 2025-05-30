@@ -34,13 +34,16 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 5
+DEVICE_DISPLAY_TIME = 6  # seconds for device list
+DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
+DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 NOTE_DEBOUNCE_TIME = 0.03
 NOTE_LATCH_WINDOW = 0.2
-NOTE_LATCH_SHOW = 2.0
+NOTE_LATCH_SHOW = 2.0  # deprecated, replaced by permanent latch
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
+# Shared state
 state = {
     'channel': None,
     'cc': None,
@@ -69,6 +72,10 @@ state = {
     'last_released_chord': set(),
     'last_release_time': 0,
     'last_latch_time': 0,
+    'last_latched_notes': set(),
+    'last_latched_time': 0,
+    'last_chord_name': '', # last recognized chord name
+    'display_update_event': threading.Event(),  # to trigger immediate redraw
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -118,11 +125,9 @@ def detect_chord(notes):
                 chord_str = f"{root}{quality}"
             return chord_str, root, quality, bass, False
         else:
-            note_names = [midi_note_to_name(n) for n in sorted(notes)]
-            return " ".join(note_names), "", "", "", True
+            return "", "", "", "", True
     except Exception:
-        note_names = [midi_note_to_name(n) for n in sorted(notes)]
-        return " ".join(note_names), "", "", "", True
+        return "", "", "", "", True
 
 def check_for_device_update():
     try:
@@ -241,13 +246,25 @@ def update_display():
         return region_y, region_h
 
     while True:
+        # Wait for either the event (from MIDI) or a 40ms timeout (for things like device list scroll)
+        event_triggered = state['display_update_event'].wait(timeout=0.04)
+        state['display_update_event'].clear()
+
         now = time.time()
         held_notes = state['held_notes']
-        to_remove = [n for n, t in state['released_notes'].items() if now - t > NOTE_LATCH_SHOW]
-        for n in to_remove:
-            del state['released_notes'][n]
-        latched_notes = set(state['released_notes'].keys()) - held_notes
-        display_notes = list(sorted(held_notes)) + list(sorted(latched_notes - held_notes))
+        show_latched = len(held_notes) == 0 and state['last_latched_notes']
+        # Remove released notes older than latch time (not needed for permanent latch, but left for logic clarity)
+        # to_remove = [n for n, t in state['released_notes'].items() if now - t > NOTE_LATCH_SHOW]
+        # for n in to_remove:
+        #     del state['released_notes'][n]
+
+        if held_notes:
+            display_notes = list(sorted(held_notes))
+        elif show_latched:
+            display_notes = list(sorted(state['last_latched_notes']))
+        else:
+            display_notes = []
+
         display_bubbles = []
         for n in display_notes:
             display_bubbles.append({
@@ -255,6 +272,7 @@ def update_display():
                 'name': midi_note_to_name(n),
                 'invert': n in held_notes
             })
+
         with canvas(device) as draw:
             if state['show_devices']:
                 devices = filter_device_names(state['devices'])
@@ -268,11 +286,22 @@ def update_display():
                             draw.text((0, y), name, font=font, fill=255)
                 else:
                     total_scroll = n_devices - MAX_DEVICE_LINES
-                    scroll_period = DEVICE_DISPLAY_TIME
-                    elapsed = (time.time() - state['device_scroll_time']) % scroll_period
-                    scroll_lines = (elapsed / scroll_period) * total_scroll
-                    first_line = int(scroll_lines)
-                    pixel_offset = int((scroll_lines - first_line) * line_h)
+                    scroll_period = DEVICE_DISPLAY_TIME - DEVICE_SCROLL_START_DELAY - DEVICE_SCROLL_END_HOLD
+                    elapsed = (time.time() - state['device_scroll_time'])
+                    if elapsed < DEVICE_SCROLL_START_DELAY:
+                        # Show first page, no scroll yet
+                        first_line = 0
+                        pixel_offset = 0
+                    elif elapsed >= DEVICE_SCROLL_START_DELAY + scroll_period:
+                        # Hold last page
+                        first_line = total_scroll
+                        pixel_offset = 0
+                    else:
+                        # Scrolling
+                        scroll_elapsed = elapsed - DEVICE_SCROLL_START_DELAY
+                        scroll_lines = (scroll_elapsed / scroll_period) * total_scroll
+                        first_line = int(scroll_lines)
+                        pixel_offset = int((scroll_lines - first_line) * line_h)
                     for i in range(MAX_DEVICE_LINES + 1):
                         idx = first_line + i
                         if idx < n_devices:
@@ -290,29 +319,36 @@ def update_display():
                     dash_x = (DISPLAY_WIDTH - dash_w) // 2
                     dash_y = region_y + (region_h - dash_h) // 2
                     draw.text((dash_x, dash_y), "--", font=bubble_font, fill=128)
-                # Chord name
+                # --- Chord name display logic ---
+                # If a chord is recognized for the current notes, show it.
+                # If not, keep showing the last recognized chord name.
                 chord_to_display = ""
-                chord_notes = set(display_notes)
-                if len(chord_notes) >= 3:
-                    chord_str, root, quality, bass, unknown = detect_chord(chord_notes)
-                    state['chord_name'] = chord_str
-                    state['chord_root'] = root
-                    state['chord_quality'] = quality
-                    state['chord_bass'] = bass
-                    state['unknown_chord'] = unknown
-                    if not unknown:
-                        state['last_chord_persist'] = chord_str
-                        state['last_chord_time'] = now
-                    chord_to_display = chord_str
-                elif state['last_chord_persist']:
-                    chord_to_display = state['last_chord_persist']
                 chord_invert = (now < state.get('last_chord_flash_until', 0))
+                if display_notes and len(display_notes) >= 3:
+                    chord_str, root, quality, bass, unknown = detect_chord(display_notes)
+                    if not unknown and chord_str:
+                        # Valid chord found
+                        state['chord_name'] = chord_str
+                        state['chord_root'] = root
+                        state['chord_quality'] = quality
+                        state['chord_bass'] = bass
+                        state['unknown_chord'] = False
+                        state['last_chord_name'] = chord_str
+                        chord_to_display = chord_str
+                    else:
+                        # Not a known chord, show last recognized chord
+                        chord_to_display = state['last_chord_name']
+                        state['chord_name'] = chord_to_display
+                        state['unknown_chord'] = True
+                else:
+                    # If nothing is played (or less than 3 notes), show last chord name if available
+                    chord_to_display = state['last_chord_name']
+
                 w, h = get_text_size(chord_to_display, chord_font)
                 chord_x = max(0, (DISPLAY_WIDTH - w) // 2)
                 if chord_to_display:
                     font_to_use = chord_bold_font if chord_invert else chord_font
                     draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, font_to_use, fill=255)
-        time.sleep(0.04)
 
 def debounce_note_event(note, now, note_timestamps, debounce_time=NOTE_DEBOUNCE_TIME):
     last = note_timestamps.get(note, 0)
@@ -344,6 +380,7 @@ def monitor_midi():
         if state['show_devices']:
             if shown_at and (time.time() - shown_at > DEVICE_DISPLAY_TIME):
                 state['show_devices'] = False
+                state['display_update_event'].set()
 
         now = time.time()
         note_changed = False
@@ -374,14 +411,19 @@ def monitor_midi():
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
+        # Latching logic for chord display and bubbles:
         if note_changed:
             if len(state['held_notes']) == 0 and len(prev_held_notes) > 0:
-                now = time.time()
-                release_times = [state['released_notes'].get(n, now) for n in prev_held_notes]
-                if release_times and (max(release_times) - min(release_times) < 0.1):
-                    for n in prev_held_notes:
-                        state['released_notes'][n] = now
-        prev_held_notes = set(state['held_notes'])
+                # All notes released: latch the last chord, persist until a new one is played
+                state['last_latched_notes'] = set(prev_held_notes)
+                state['last_latched_time'] = now
+            elif len(state['held_notes']) > 0:
+                # New notes pressed: clear the latch
+                state['last_latched_notes'] = set()
+                state['last_latched_time'] = 0
+            prev_held_notes = set(state['held_notes'])
+            # Immediately trigger display update on MIDI event
+            state['display_update_event'].set()
         time.sleep(0.01)
 
 if __name__ == "__main__":
