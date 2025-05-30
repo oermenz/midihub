@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import os
 import time
 import threading
@@ -7,19 +8,19 @@ from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 from PIL import Image, ImageFont
-import PIL
-print(PIL.__version__)
 from music21 import note as m21note, chord as m21chord
 
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
 
-# Font paths
-font = ImageFont.load("/home/oermens/midihub/fonts/tom-thumb.bdf")
-print("Font loaded!", font)
+# Font paths - now using PIL format fonts from the repo's fonts/ directory
+FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
+font_info = ImageFont.load(os.path.join(FONT_DIR, "tom-thumb.pil"))
+font_device = ImageFont.load(os.path.join(FONT_DIR, "miniwi-8.pil"))
+print("Fonts loaded!", font_info, font_device)
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 5      # seconds
+DEVICE_DISPLAY_TIME = 5
 NOTE_DEBOUNCE_TIME = 0.03
 FLASH_TIME = 0.3
 
