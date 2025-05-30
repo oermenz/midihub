@@ -6,7 +6,7 @@ from PIL import ImageFont
 serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 try:
-    font = ImageFont.load("/home/YOURUSER/midihub/fonts/miniwi-8.bdf")
+    font = ImageFont.load("/home/oermens/midihub/fonts/miniwi-8.bdf")
 except Exception:
     font = ImageFont.load_default()
 
