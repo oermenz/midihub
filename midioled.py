@@ -31,11 +31,11 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 6  # seconds
+DEVICE_DISPLAY_TIME = 6  # seconds for device list
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 NOTE_DEBOUNCE_TIME = 0.03
-CHORD_RELEASE_WINDOW = 0.1  # 100ms window for chord latching
+CHORD_RELEASE_WINDOW = 0.2  # 100ms window for chord latching
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
