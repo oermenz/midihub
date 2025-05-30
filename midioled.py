@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os
 import time
 import threading
@@ -36,7 +35,7 @@ def load_fonts():
 font_device, font_info, font_info_small = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 5      # seconds (was 4)
+DEVICE_DISPLAY_TIME = 5      # seconds
 NOTE_DEBOUNCE_TIME = 0.03
 FLASH_TIME = 0.3
 
@@ -149,6 +148,16 @@ def get_text_size(text, font):
     else:
         return (len(text) * 6, 10)
 
+def draw_centered_text(draw, x, y, w, h, text, font, fill):
+    # Get font metrics for better vertical centering
+    ascent, descent = font.getmetrics()
+    text_w, text_h = get_text_size(text, font)
+    # PIL draws text from the top, but the visual center is a bit higher
+    # Compute baseline so text is vertically centered
+    # Subtract descent so the text doesn't go out of the box
+    text_y = y + (h - (ascent + descent)) // 2
+    draw.text((x + (w - text_w) // 2, text_y), text, font=font, fill=fill)
+
 def draw_toprow(draw, y, state):
     ch = str(state['channel']) if state['channel'] is not None else '-'
     cc = str(state['cc']) if state['cc'] is not None else '-'
@@ -159,7 +168,7 @@ def draw_toprow(draw, y, state):
     values = [ch, cc, val]
     flash_until = state.get('toprow_values_flash_until', {})
     padd = 2
-    sep = 4
+    sep = 2  # Lowered for more compact spacing
     parts = []
     for label, value in zip(labels, values):
         lw, lh = get_text_size(label, font)
@@ -175,9 +184,9 @@ def draw_toprow(draw, y, state):
         invert = now < flash_until.get(['ch','cc','val'][i], 0)
         if invert:
             draw.rectangle((x, y, x + vw, y + vh), outline=255, fill=255)
-            draw.text((x, y), value, font=font, fill=0)
+            draw_centered_text(draw, x, y, vw, vh, value, font, fill=0)
         else:
-            draw.text((x, y), value, font=font, fill=255)
+            draw_centered_text(draw, x, y, vw, vh, value, font, fill=255)
         x += vw + sep
 
 def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set):
@@ -199,17 +208,17 @@ def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set):
         except IndexError:
             note_val = None
         invert = note_val in held_set
-        text_y = y + (bubble_h - h) // 2
+        # Use vertical centering that matches draw_centered_text
         if invert:
             draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=5, outline=255, fill=255)
-            draw.text((x + (bw - w) // 2, text_y), name, font=font, fill=0)
+            draw_centered_text(draw, x, y, bw, bubble_h, name, font, fill=0)
         else:
             draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=5, outline=255, fill=0)
-            draw.text((x + (bw - w) // 2, text_y), name, font=font, fill=255)
+            draw_centered_text(draw, x, y, bw, bubble_h, name, font, fill=255)
         x += bw + spacing
 
 def update_display():
-    chord_fixed_y = DISPLAY_HEIGHT - get_text_size("A", font_info)[1] - 2  # Static y for chord name
+    chord_fixed_y = DISPLAY_HEIGHT - get_text_size("A", font_info)[1] - 2 - 8  # Raise chord by 8 pixels
     while True:
         with canvas(device) as draw:
             if state['show_devices']:
@@ -257,7 +266,8 @@ def update_display():
                 bubble_font = font_info
                 bubble_h = get_text_size("A", bubble_font)[1] + 2
                 # Center bubbles vertically between toprow and chord
-                bubbles_y = (chord_fixed_y - bubble_h - get_text_size("A", font_info)[1]) // 2 + get_text_size("A", font_info)[1]
+                toprow_height = get_text_size("A", font_info)[1]
+                bubbles_y = (chord_fixed_y - bubble_h - toprow_height) // 2 + toprow_height
                 if notes_to_display:
                     draw_bubble_notes(
                         draw, bubbles_y, notes_to_display, note_vals,
@@ -282,9 +292,9 @@ def update_display():
                             (chord_x, chord_fixed_y, chord_x + w, chord_fixed_y + h),
                             outline=255, fill=255
                         )
-                        draw.text((chord_x, chord_fixed_y), chord_to_display, font=chord_font, fill=0)
+                        draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, chord_font, fill=0)
                     else:
-                        draw.text((chord_x, chord_fixed_y), chord_to_display, font=chord_font, fill=255)
+                        draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, chord_font, fill=255)
         time.sleep(0.04)
 
 def debounce_note_event(note, now):
