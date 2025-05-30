@@ -6,7 +6,8 @@ from mido import get_input_names, open_input
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
-from PIL import ImageFont
+from PIL import Image, ImageFont
+import PIL
 print(PIL.__version__)
 from music21 import note as m21note, chord as m21chord
 
