@@ -1,1 +1,2 @@
-ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*010300*", RUN+="/bin/systemctl start midihub.service"
+ACTION=="add", SUBSYSTEM=="sound", RUN+="/bin/systemctl start midihub.service"
+ACTION=="remove", SUBSYSTEM=="sound", RUN+="/bin/systemctl start midihub.service"
