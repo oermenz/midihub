@@ -16,7 +16,7 @@ serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 
 # Load default font
-font_path = os.path.expanduser("~/midihub/font/miniwi-8.bdf")
+font_path = os.path.expanduser("~/midihub/fonts/miniwi-8.bdf")
 try:
     font = ImageFont.load(font_path)
 except Exception:
