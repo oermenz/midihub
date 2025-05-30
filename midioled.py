@@ -15,6 +15,7 @@ DISPLAY_HEIGHT = 64
 # Font paths
 FONT_DIR = os.path.expanduser("~/midihub/fonts")
 FONT_DEVICE_LIST = os.path.join(FONT_DIR, "miniwi-8.bdf")
+FONT_TOMTHUMB = os.path.join(FONT_DIR, "tom-thumb.bdf")
 FONT_INFO = os.path.join(FONT_DIR, "RobotoMono-VariableFont_wght.ttf")
 
 def load_fonts():
@@ -24,21 +25,19 @@ def load_fonts():
     except Exception as e:
         print(f"Failed to load miniwi-8.bdf: {e}")
         font_device = ImageFont.load_default()
-
-#def load_fonts():
-#    try:
-#        font_device = ImageFont.load(FONT_DEVICE_LIST)
-#    except Exception:
-#        font_device = None
-#    try:
-#        font_info = ImageFont.truetype(FONT_INFO, 14)
-#    except Exception:
-#        font_info = None
-#    try:
-#        font_info_small = ImageFont.truetype(FONT_INFO, 11)
-#    except Exception:
-#        font_info_small = None
-#    return font_device, font_info, font_info_small
+    try:
+        font_tomthumb = ImageFont.load(FONT_TOMTHUMB)
+        print("Loaded tom-thumb.bdf successfully!")
+    except Exception as e:
+        print(f"Failed to load tom-thumb.bdf: {e}")
+        font_tomthumb = font_device  # fallback
+    try:
+        font_info = ImageFont.truetype(FONT_INFO, 14)
+        print("Loaded RobotoMono-VariableFont_wght.ttf successfully!")
+    except Exception as e:
+        print(f"Failed to load RobotoMono font: {e}")
+        font_info = font_device  # fallback
+    return font_device, font_tomthumb, font_info
 
 font_device, font_info, font_info_small = load_fonts()
 
