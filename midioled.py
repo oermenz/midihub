@@ -31,11 +31,11 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 6  # seconds for device list
+DEVICE_DISPLAY_TIME = 6        # seconds device listing
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
-NOTE_DEBOUNCE_TIME = 0.03
-CHORD_RELEASE_WINDOW = 0.2  # 200ms window for chord latching
+CHORD_RELEASE_WINDOW = 0.2     # 200ms window for chord latching
+CC_DEBOUNCE_TIME = 0.02        # 20ms debounce for CC values
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
@@ -273,7 +273,6 @@ def update_display():
                         if y < DISPLAY_HEIGHT:
                             draw.text((0, y), name, font=font, fill=255)
                 else:
-                    # Improved: Draw all possibly visible devices at any pixel offset!
                     list_height = line_h * n_devices
                     max_pixel_offset = max(0, list_height - DISPLAY_HEIGHT)
                     scroll_period = DEVICE_DISPLAY_TIME - DEVICE_SCROLL_START_DELAY - DEVICE_SCROLL_END_HOLD
@@ -326,10 +325,10 @@ def update_display():
                     font_to_use = chord_bold_font if chord_invert else chord_font
                     draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, font_to_use, fill=255)
 
-def debounce_note_event(note, now, note_timestamps, debounce_time=NOTE_DEBOUNCE_TIME):
-    last = note_timestamps.get(note, 0)
+def debounce_cc_event(cc_number, now, cc_timestamps, debounce_time=CC_DEBOUNCE_TIME):
+    last = cc_timestamps.get(cc_number, 0)
     if now - last > debounce_time:
-        note_timestamps[note] = now
+        cc_timestamps[cc_number] = now
         return True
     return False
 
@@ -338,7 +337,7 @@ def monitor_midi():
     last_device_list = []
     shown_at = None
     prev_ch = None
-    note_timestamps = {}
+    cc_timestamps = {}
 
     while True:
         if check_for_device_update() or not inputs:
@@ -363,40 +362,43 @@ def monitor_midi():
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
-                    if debounce_note_event(msg.note, now, note_timestamps):
-                        state['channel'] = msg.channel + 1
-                        state['held_notes'].add(msg.note)
-                        state['released_notes'].pop(msg.note, None)
-                        midi_event = True
-                        if state['chord_release_pending']:
-                            state['chord_release_pending'] = False
-                elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
-                    if debounce_note_event(msg.note, now, note_timestamps):
-                        state['channel'] = msg.channel + 1
-                        if msg.note in state['held_notes']:
-                            state['held_notes'].remove(msg.note)
-                        state['released_notes'][msg.note] = now
-                        midi_event = True
-                        if not state['chord_release_pending'] and len(state['held_notes']) > 0:
-                            state['chord_release_pending'] = True
-                            state['chord_release_start_time'] = now
-                            state['chord_release_notes'] = set(state['held_notes'])
-                        elif not state['chord_release_pending'] and len(state['held_notes']) == 0:
-                            state['last_latched_notes'] = set([msg.note])
-                            state['last_latched_time'] = now
-                elif msg.type == 'control_change':
+                    # Removed debounce for note events: Always process
                     state['channel'] = msg.channel + 1
-                    if state['cc'] != msg.control:
-                        state['toprow_values_flash_until']['cc'] = now + FLASH_TIME
-                    if state['cc_val'] != msg.value:
-                        state['toprow_values_flash_until']['val'] = now + FLASH_TIME
-                    state['cc'] = msg.control
-                    state['cc_val'] = msg.value
+                    state['held_notes'].add(msg.note)
+                    state['released_notes'].pop(msg.note, None)
+                    midi_event = True
+                    if state['chord_release_pending']:
+                        state['chord_release_pending'] = False
+                elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
+                    # Removed debounce for note events: Always process
+                    state['channel'] = msg.channel + 1
+                    if msg.note in state['held_notes']:
+                        state['held_notes'].remove(msg.note)
+                    state['released_notes'][msg.note] = now
+                    midi_event = True
+                    if not state['chord_release_pending'] and len(state['held_notes']) > 0:
+                        state['chord_release_pending'] = True
+                        state['chord_release_start_time'] = now
+                        state['chord_release_notes'] = set(state['held_notes'])
+                    elif not state['chord_release_pending'] and len(state['held_notes']) == 0:
+                        state['last_latched_notes'] = set([msg.note])
+                        state['last_latched_time'] = now
+                elif msg.type == 'control_change':
+                    # Add debounce for CC values
+                    if debounce_cc_event(msg.control, now, cc_timestamps):
+                        state['channel'] = msg.channel + 1
+                        if state['cc'] != msg.control:
+                            state['toprow_values_flash_until']['cc'] = now + FLASH_TIME
+                        if state['cc_val'] != msg.value:
+                            state['toprow_values_flash_until']['val'] = now + FLASH_TIME
+                        state['cc'] = msg.control
+                        state['cc_val'] = msg.value
+                        midi_event = True
         if prev_ch != state['channel']:
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
-        # Handle chord release window
+        # Handle chord release window (now 200ms)
         if state['chord_release_pending']:
             if now - state['chord_release_start_time'] >= CHORD_RELEASE_WINDOW or len(state['held_notes']) == 0:
                 state['last_latched_notes'] = set(state['chord_release_notes'])
