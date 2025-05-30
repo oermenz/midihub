@@ -44,7 +44,6 @@ TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 DEVICE_DISPLAY_TIME = 4      # seconds
 NOTE_DEBOUNCE_TIME = 0.03
 FLASH_TIME = 0.3
-BUBBLE_FLASH_TIME = 0.08     # length of flash for note bubbles
 
 # Shared state
 state = {
@@ -72,10 +71,7 @@ state = {
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
     'device_name_scroll_time': 0,
-    'bubble_invert_notes': set(),      # notes currently being held for bubble inversion
     'bubble_latched_notes': [],        # latched notes for display
-    'bubble_last_changed': 0,
-    'bubble_invert_until': {},         # note: time to keep inverting bubble after release
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -196,97 +192,86 @@ def draw_toprow(draw, y, state):
             draw.text((x, y), value, font=font, fill=255)
         x += vw + sep
 
-def draw_bubble_notes(draw, y, note_names, held_notes, font, invert_bubbles, invert_until):
-    """Draw each note in a rounded rectangle 'bubble', vertically centered text.
-    If invert_bubbles is True for a note, invert that bubble (held down), else normal.
-    """
-    padd_x = 8
-    padd_y = 4
-    spacing = 6
-    bubble_h = max(get_text_size("A", font)[1] + 2 * padd_y, 24)
+def draw_bubble_notes(draw, y, note_names, held_notes, font, held_set):
+    """Draw note 'bubbles' in one line, tightly packed, with vertical centering.
+       Invert bubble if note is currently held."""
+    padd_x = 4  # Small horizontal padding
+    padd_y = 2  # Small vertical padding
+    spacing = 2  # Reduced spacing between bubbles
+    bubble_h = get_text_size("A", font)[1] + padd_y * 2  # Bubble height just fits the font
     bubble_w = []
     for name in note_names:
         w, h = get_text_size(name, font)
         bubble_w.append(w + 2 * padd_x)
     total_w = sum(bubble_w) + spacing * (len(note_names) - 1)
-    x = (DISPLAY_WIDTH - total_w) // 2
-    now = time.time()
+    x = max(0, (DISPLAY_WIDTH - total_w) // 2)
     for i, name in enumerate(note_names):
         w, h = get_text_size(name, font)
         bw = bubble_w[i]
-        # Which note does this bubble represent?
         try:
             note_val = held_notes[i]
         except IndexError:
             note_val = None
-        # Decide invert
-        invert = False
-        if note_val is not None:
-            invert = note_val in invert_bubbles or (now < invert_until.get(note_val, 0))
-        # Rectangle (invert bubble fill)
+        invert = note_val in held_set
+        # Center text vertically in the bubble
+        text_y = y + (bubble_h - h) // 2
         if invert:
-            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=8, outline=255, fill=255)
-            draw.text((x + (bw - w) // 2, y + (bubble_h - h) // 2), name, font=font, fill=0)
+            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=7, outline=255, fill=255)
+            draw.text((x + (bw - w) // 2, text_y), name, font=font, fill=0)
         else:
-            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=8, outline=255, fill=0)
-            draw.text((x + (bw - w) // 2, y + (bubble_h - h) // 2), name, font=font, fill=255)
+            draw.rounded_rectangle((x, y, x + bw, y + bubble_h), radius=7, outline=255, fill=0)
+            draw.text((x + (bw - w) // 2, text_y), name, font=font, fill=255)
         x += bw + spacing
 
 def update_display():
     while True:
         with canvas(device) as draw:
             if state['show_devices']:
-                # Device list display
+                # Smooth pixel-based device list scrolling
                 devices = filter_device_names(state['devices'])
                 font = font_device
                 line_h = get_text_size("A", font)[1] + 2
-                # lines per screen
-                lines_per_screen = DISPLAY_HEIGHT // line_h
                 n_devices = len(devices)
-                scroll_needed = n_devices > lines_per_screen
-                now = time.time()
-                # Scroll logic: every DEVICE_DISPLAY_TIME, scroll to next page
-                if scroll_needed:
-                    total_pages = n_devices - lines_per_screen + 1
-                    page_time = DEVICE_DISPLAY_TIME / max(1, total_pages)
-                    page = int((now - state['device_scroll_time']) // page_time) % total_pages
-                else:
-                    page = 0
-                y = 0
-                for idx in range(page, min(page + lines_per_screen, n_devices)):
-                    draw.text((0, y), devices[idx], font=font, fill=255)
-                    y += line_h
+                visible_lines = DISPLAY_HEIGHT // line_h
+                scroll_pixels = int((time.time() - state['device_scroll_time']) * 20)  # 20 px/sec scroll speed
+                total_height = n_devices * line_h
+                offset = scroll_pixels % total_height
+                for i in range(visible_lines + 1):  # +1 to fill screen at wrap
+                    idx = (i + offset // line_h) % n_devices
+                    y = i * line_h - (offset % line_h)
+                    if 0 <= y < DISPLAY_HEIGHT:
+                        draw.text((0, y), devices[idx], font=font, fill=255)
             else:
                 # Info screen
-                # 1. Top row: CH, CC, VAL
                 draw_toprow(draw, 0, state)
 
-                # 2. Notes - bubble notes, big
-                # Show active notes if any, else latched notes
+                # Bubbles: tighter, smaller, more per line
+                # Use new bubble layout logic
                 if state['active_notes']:
                     notes_to_display = [midi_note_to_name(n) for n in sorted(state['active_notes'])]
                     note_vals = sorted(state['active_notes'])
+                    held_set = set(note_vals)
                 elif state['bubble_latched_notes']:
                     notes_to_display = [midi_note_to_name(n) for n in state['bubble_latched_notes']]
                     note_vals = state['bubble_latched_notes']
+                    held_set = set()
                 else:
                     notes_to_display = []
                     note_vals = []
-                # Bubble y center
+                    held_set = set()
                 bubble_font = font_info_big
-                bubble_h = max(get_text_size("A", bubble_font)[1] + 8, 28)
+                bubble_h = get_text_size("A", bubble_font)[1] + 4
                 bubble_y = (DISPLAY_HEIGHT - bubble_h - 2 - get_text_size("A", font_info)[1]) // 2
                 if notes_to_display:
                     draw_bubble_notes(
                         draw, bubble_y, notes_to_display, note_vals,
                         font=bubble_font,
-                        invert_bubbles=state['bubble_invert_notes'],
-                        invert_until=state['bubble_invert_until']
+                        held_set=held_set
                     )
                 else:
                     draw.text((DISPLAY_WIDTH // 2 - 10, bubble_y), "--", font=bubble_font, fill=128)
 
-                # 3. Chord name, centered, small font, at bottom
+                # Chord output logic
                 chord_font = font_info
                 chord_to_display = ""
                 if len(note_vals) >= 3 and state['chord_name']:
@@ -305,7 +290,7 @@ def update_display():
                         draw.text((max(0, (DISPLAY_WIDTH - w) // 2), chord_y), chord_to_display, font=chord_font, fill=0)
                     else:
                         draw.text((max(0, (DISPLAY_WIDTH - w) // 2), chord_y), chord_to_display, font=chord_font, fill=255)
-        time.sleep(0.08)
+        time.sleep(0.04)  # Faster update for smoother display and better VAL responsiveness
 
 def debounce_note_event(note, now):
     last = state['note_timestamps'].get(note, 0)
@@ -318,9 +303,11 @@ def monitor_midi():
     inputs = []
     last_device_list = []
     shown_at = None
-    prev_chord = ''
+    prev_ch = None
+    prev_cc = None
+    prev_val = None
     while True:
-        # Device hotplug
+        # Device update
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
             filtered_devices = filter_device_names(current_devices)
@@ -348,36 +335,25 @@ def monitor_midi():
                         state['channel'] = msg.channel + 1
                         state['active_notes'].add(msg.note)
                         note_changed = True
-                        # Invert bubble for this note
-                        state['bubble_invert_notes'].add(msg.note)
-                        state['bubble_invert_until'][msg.note] = now + BUBBLE_FLASH_TIME
-                        state['bubble_last_changed'] = now
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
                     if debounce_note_event(msg.note, now):
                         state['channel'] = msg.channel + 1
                         if msg.note in state['active_notes']:
                             state['active_notes'].remove(msg.note)
                         note_changed = True
-                        # Remove inversion for this note after short flash
-                        state['bubble_invert_notes'].discard(msg.note)
-                        state['bubble_invert_until'][msg.note] = now + BUBBLE_FLASH_TIME
-                        state['bubble_last_changed'] = now
                 elif msg.type == 'control_change':
                     state['channel'] = msg.channel + 1
-                    # Only flash CC/VAL if value changed
                     if state['cc'] != msg.control:
                         state['toprow_values_flash_until']['cc'] = now + FLASH_TIME
                     if state['cc_val'] != msg.value:
                         state['toprow_values_flash_until']['val'] = now + FLASH_TIME
                     state['cc'] = msg.control
                     state['cc_val'] = msg.value
-        # Update top row flash for channel change
-        if state['active_notes']:
-            ch = min([msg.channel + 1 for port in inputs for msg in port.iter_pending() if hasattr(msg, 'channel')], default=state['channel'])
-            if state['toprow_last'].get('ch') != ch:
-                state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
-            state['toprow_last']['ch'] = ch
-        # Update note and chord state, latching logic
+        # Flash logic for CH value
+        if prev_ch != state['channel']:
+            state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
+        prev_ch = state['channel']
+        # Latching, chord, bubble update logic
         if note_changed or (not state['active_notes'] and state['bubble_latched_notes']):
             sorted_notes = sorted(state['active_notes'])
             names = [midi_note_to_name(n) for n in sorted_notes]
@@ -402,11 +378,6 @@ def monitor_midi():
             else:
                 # On all keys released: keep latched notes
                 pass
-        # Remove bubbles from invert after their flash time
-        expired = [n for n, t in state['bubble_invert_until'].items() if now > t]
-        for n in expired:
-            state['bubble_invert_notes'].discard(n)
-            del state['bubble_invert_until'][n]
         time.sleep(0.01)
 
 if __name__ == "__main__":
