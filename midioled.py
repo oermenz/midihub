@@ -150,7 +150,8 @@ def filter_device_names(devices):
 
 def get_text_size(text, font):
     if font:
-        return font.getsize(text)
+        bbox = font.getbbox(text)
+        return (bbox[2] - bbox[0], bbox[3] - bbox[1])
     else:
         # fallback: estimate 6px per char
         return (len(text) * 6, 10)
