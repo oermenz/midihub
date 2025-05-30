@@ -35,7 +35,7 @@ DEVICE_DISPLAY_TIME = 6  # seconds
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 NOTE_DEBOUNCE_TIME = 0.03
-CHORD_RELEASE_WINDOW = 0.2  # 100ms window for chord latching
+CHORD_RELEASE_WINDOW = 0.1  # 100ms window for chord latching
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
@@ -273,24 +273,22 @@ def update_display():
                         if y < DISPLAY_HEIGHT:
                             draw.text((0, y), name, font=font, fill=255)
                 else:
-                    # Smooth pixel scrolling logic
-                    total_lines = n_devices
-                    visible_lines = MAX_DEVICE_LINES
-                    total_scroll_pixels = line_h * (total_lines - visible_lines)
+                    # Improved: Draw all possibly visible devices at any pixel offset!
+                    list_height = line_h * n_devices
+                    max_pixel_offset = max(0, list_height - DISPLAY_HEIGHT)
                     scroll_period = DEVICE_DISPLAY_TIME - DEVICE_SCROLL_START_DELAY - DEVICE_SCROLL_END_HOLD
                     elapsed = (time.time() - state['device_scroll_time'])
                     if elapsed < DEVICE_SCROLL_START_DELAY:
                         pixel_offset = 0
                     elif elapsed >= DEVICE_SCROLL_START_DELAY + scroll_period:
-                        pixel_offset = total_scroll_pixels
+                        pixel_offset = max_pixel_offset
                     else:
                         scroll_elapsed = elapsed - DEVICE_SCROLL_START_DELAY
-                        pixel_offset = int((scroll_elapsed / scroll_period) * total_scroll_pixels)
-                    for i in range(visible_lines):
-                        idx = i + (pixel_offset // line_h)
-                        y = (i * line_h) - (pixel_offset % line_h)
-                        if 0 <= idx < n_devices and 0 <= y < DISPLAY_HEIGHT:
-                            draw.text((0, y), devices[idx], font=font, fill=255)
+                        pixel_offset = int((scroll_elapsed / scroll_period) * max_pixel_offset)
+                    for i in range(n_devices):
+                        y = i * line_h - pixel_offset
+                        if -line_h < y < DISPLAY_HEIGHT:
+                            draw.text((0, y), devices[i], font=font, fill=255)
             else:
                 draw_toprow(draw, topline_y, state)
                 bubble_font = fonts['bubble']
@@ -370,7 +368,6 @@ def monitor_midi():
                         state['held_notes'].add(msg.note)
                         state['released_notes'].pop(msg.note, None)
                         midi_event = True
-                        # If a new note is played during a chord release window, cancel the pending latch
                         if state['chord_release_pending']:
                             state['chord_release_pending'] = False
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
@@ -380,12 +377,10 @@ def monitor_midi():
                             state['held_notes'].remove(msg.note)
                         state['released_notes'][msg.note] = now
                         midi_event = True
-                        # Start chord release window if not already started, and some notes were held
                         if not state['chord_release_pending'] and len(state['held_notes']) > 0:
                             state['chord_release_pending'] = True
                             state['chord_release_start_time'] = now
                             state['chord_release_notes'] = set(state['held_notes'])
-                        # If all notes are released (held_notes is now empty), latch immediately
                         elif not state['chord_release_pending'] and len(state['held_notes']) == 0:
                             state['last_latched_notes'] = set([msg.note])
                             state['last_latched_time'] = now
@@ -404,7 +399,6 @@ def monitor_midi():
         # Handle chord release window
         if state['chord_release_pending']:
             if now - state['chord_release_start_time'] >= CHORD_RELEASE_WINDOW or len(state['held_notes']) == 0:
-                # Latch the notes that were held at the start of the window
                 state['last_latched_notes'] = set(state['chord_release_notes'])
                 state['last_latched_time'] = now
                 state['chord_release_pending'] = False
