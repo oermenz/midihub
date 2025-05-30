@@ -7,39 +7,15 @@ from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 from PIL import ImageFont
+print(PIL.__version__)
 from music21 import note as m21note, chord as m21chord
 
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
 
 # Font paths
-FONT_DIR = os.path.expanduser("~/midihub/fonts")
-FONT_DEVICE_LIST = os.path.join(FONT_DIR, "miniwi-8.bdf")
-FONT_TOMTHUMB = os.path.join(FONT_DIR, "tom-thumb.bdf")
-FONT_INFO = os.path.join(FONT_DIR, "RobotoMono-VariableFont_wght.ttf")
-
-def load_fonts():
-    try:
-        font_device = ImageFont.load(FONT_DEVICE_LIST)
-        print("Loaded miniwi-8.bdf successfully!")
-    except Exception as e:
-        print(f"Failed to load miniwi-8.bdf: {e}")
-        font_device = ImageFont.load_default()
-    try:
-        font_tomthumb = ImageFont.load(FONT_TOMTHUMB)
-        print("Loaded tom-thumb.bdf successfully!")
-    except Exception as e:
-        print(f"Failed to load tom-thumb.bdf: {e}")
-        font_tomthumb = font_device  # fallback
-    try:
-        font_info = ImageFont.truetype(FONT_INFO, 14)
-        print("Loaded RobotoMono-VariableFont_wght.ttf successfully!")
-    except Exception as e:
-        print(f"Failed to load RobotoMono font: {e}")
-        font_info = font_device  # fallback
-    return font_device, font_tomthumb, font_info
-
-font_device, font_info, font_info_small = load_fonts()
+font = ImageFont.load("/home/oermens/midihub/fonts/tom-thumb.bdf")
+print("Font loaded!", font)
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 DEVICE_DISPLAY_TIME = 5      # seconds
