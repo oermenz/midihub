@@ -15,10 +15,7 @@ DISPLAY_HEIGHT = 64
 
 FONT_DIR = os.path.expanduser("~/midihub/fonts")
 
-# Load Terminus bitmap fonts for different UI roles
 def load_fonts():
-    # Sizes: u14 for most, u18 for notes
-    # Styles: n = normal, b = bold
     fonts = {}
     try:
         fonts['label'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
@@ -34,16 +31,14 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-DEVICE_DISPLAY_TIME = 6  # seconds for device list
+DEVICE_DISPLAY_TIME = 6  # seconds
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 NOTE_DEBOUNCE_TIME = 0.03
 NOTE_LATCH_WINDOW = 0.2
-NOTE_LATCH_SHOW = 2.0  # deprecated, replaced by permanent latch
 FLASH_TIME = 0.3
 MAX_DEVICE_LINES = 5
 
-# Shared state
 state = {
     'channel': None,
     'cc': None,
@@ -66,16 +61,12 @@ state = {
     'toprow_last': {'ch': None, 'cc': None, 'val': None},
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
-    # New note state tracking
     'held_notes': set(),
-    'released_notes': {},  # note -> release_time
-    'last_released_chord': set(),
-    'last_release_time': 0,
-    'last_latch_time': 0,
+    'released_notes': {},
     'last_latched_notes': set(),
     'last_latched_time': 0,
-    'last_chord_name': '', # last recognized chord name
-    'display_update_event': threading.Event(),  # to trigger immediate redraw
+    'last_chord_name': '',
+    'display_update_event': threading.Event(),
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -196,7 +187,6 @@ def draw_toprow(draw, y, state):
         draw.text((x, label_y), label, font=label_font, fill=255)
         x += lw + padd
         invert = now < flash_until.get(['ch','cc','val'][i], 0)
-        # For flashing, use bold for value
         font_to_use = value_font if invert else label_font
         draw_centered_text(draw, x, baseline_y, vw, maxh, value, font_to_use, fill=255)
         x += vw + sep
@@ -246,18 +236,12 @@ def update_display():
         return region_y, region_h
 
     while True:
-        # Wait for either the event (from MIDI) or a 40ms timeout (for things like device list scroll)
         event_triggered = state['display_update_event'].wait(timeout=0.04)
         state['display_update_event'].clear()
 
         now = time.time()
         held_notes = state['held_notes']
         show_latched = len(held_notes) == 0 and state['last_latched_notes']
-        # Remove released notes older than latch time (not needed for permanent latch, but left for logic clarity)
-        # to_remove = [n for n, t in state['released_notes'].items() if now - t > NOTE_LATCH_SHOW]
-        # for n in to_remove:
-        #     del state['released_notes'][n]
-
         if held_notes:
             display_notes = list(sorted(held_notes))
         elif show_latched:
@@ -289,23 +273,18 @@ def update_display():
                     scroll_period = DEVICE_DISPLAY_TIME - DEVICE_SCROLL_START_DELAY - DEVICE_SCROLL_END_HOLD
                     elapsed = (time.time() - state['device_scroll_time'])
                     if elapsed < DEVICE_SCROLL_START_DELAY:
-                        # Show first page, no scroll yet
                         first_line = 0
-                        pixel_offset = 0
                     elif elapsed >= DEVICE_SCROLL_START_DELAY + scroll_period:
-                        # Hold last page
                         first_line = total_scroll
-                        pixel_offset = 0
                     else:
-                        # Scrolling
                         scroll_elapsed = elapsed - DEVICE_SCROLL_START_DELAY
                         scroll_lines = (scroll_elapsed / scroll_period) * total_scroll
                         first_line = int(scroll_lines)
-                        pixel_offset = int((scroll_lines - first_line) * line_h)
-                    for i in range(MAX_DEVICE_LINES + 1):
+                    # Display window: always up to MAX_DEVICE_LINES, never more, and never go out of range
+                    for i in range(MAX_DEVICE_LINES):
                         idx = first_line + i
                         if idx < n_devices:
-                            y = i * line_h - pixel_offset
+                            y = i * line_h
                             if 0 <= y < DISPLAY_HEIGHT:
                                 draw.text((0, y), devices[idx], font=font, fill=255)
             else:
@@ -319,15 +298,12 @@ def update_display():
                     dash_x = (DISPLAY_WIDTH - dash_w) // 2
                     dash_y = region_y + (region_h - dash_h) // 2
                     draw.text((dash_x, dash_y), "--", font=bubble_font, fill=128)
-                # --- Chord name display logic ---
-                # If a chord is recognized for the current notes, show it.
-                # If not, keep showing the last recognized chord name.
+                # Chord name display logic
                 chord_to_display = ""
                 chord_invert = (now < state.get('last_chord_flash_until', 0))
                 if display_notes and len(display_notes) >= 3:
                     chord_str, root, quality, bass, unknown = detect_chord(display_notes)
                     if not unknown and chord_str:
-                        # Valid chord found
                         state['chord_name'] = chord_str
                         state['chord_root'] = root
                         state['chord_quality'] = quality
@@ -336,12 +312,10 @@ def update_display():
                         state['last_chord_name'] = chord_str
                         chord_to_display = chord_str
                     else:
-                        # Not a known chord, show last recognized chord
                         chord_to_display = state['last_chord_name']
                         state['chord_name'] = chord_to_display
                         state['unknown_chord'] = True
                 else:
-                    # If nothing is played (or less than 3 notes), show last chord name if available
                     chord_to_display = state['last_chord_name']
 
                 w, h = get_text_size(chord_to_display, chord_font)
@@ -411,19 +385,18 @@ def monitor_midi():
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
 
-        # Latching logic for chord display and bubbles:
+        # Robust latching: latch all notes that were held just before the last note is released!
         if note_changed:
             if len(state['held_notes']) == 0 and len(prev_held_notes) > 0:
-                # All notes released: latch the last chord, persist until a new one is played
                 state['last_latched_notes'] = set(prev_held_notes)
                 state['last_latched_time'] = now
             elif len(state['held_notes']) > 0:
-                # New notes pressed: clear the latch
                 state['last_latched_notes'] = set()
                 state['last_latched_time'] = 0
             prev_held_notes = set(state['held_notes'])
-            # Immediately trigger display update on MIDI event
             state['display_update_event'].set()
+        else:
+            prev_held_notes = set(state['held_notes'])
         time.sleep(0.01)
 
 if __name__ == "__main__":
