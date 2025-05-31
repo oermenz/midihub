@@ -21,8 +21,8 @@ DEVICE_SCROLL_START_DELAY = 1
 DEVICE_SCROLL_END_HOLD = 1
 CC_DEBOUNCE_TIME = 0.02
 FLASH_TIME = 0.3
-TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-FONT_DIR = os.path.expanduser("~/midihub/fonts")
+TRIGGER_FILE = "/tmp/hookup_devices.trigger"
+FONT_DIR = os.path.expanduser("~/hookup/fonts")
 OCTAVE_OFFSET = -1  # Adjust octave offset
 
 # --- LOGGING (optional, can be removed if not needed) ---
