@@ -7,13 +7,14 @@ USER_NAME="$(whoami)"
 USER_HOME="$HOME"
 REPO_DIR="$USER_HOME/hookup"
 VENV_DIR="$REPO_DIR/venv"
+YELLOW='\033[0;33m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
 # ==== ENABLE i2C + UART ====
-echo "==> Enabeling i2c and UART pins..."
+echo "==> Enabling i2c and UART pins..."
 sudo raspi-config nonint do_i2c 0
 sudo raspi-config nonint do_serial 1
 
@@ -35,27 +36,42 @@ if [ -f "$REPO_DIR/requirements.txt" ]; then
     pip install -r "$REPO_DIR/requirements.txt"
 fi
 
-# ==== COPY FILES ====
-echo "==> Copying service and target files..."
-for SERVICE in midiup.service audioup.service oledup.service hookup.target; do
-    sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$SERVICE" | sudo tee "/etc/systemd/system/$SERVICE" > /dev/null
+# ==== INSTALL SYSTEMD SERVICES (with prompts) ====
+REQUIRED_SERVICE="midiup.service"
+OPTIONAL_SERVICES=("audioup.service" "oledup.service")
+TARGET_SERVICE="hookup.target"
+
+# Required service check and install
+if [ ! -f "$REPO_DIR/services/$REQUIRED_SERVICE" ]; then
+    echo -e "${RED}Error:${RESET} $REQUIRED_SERVICE is required but not found in $REPO_DIR/services."
+    exit 1
+fi
+sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$REQUIRED_SERVICE" | sudo tee "/etc/systemd/system/$REQUIRED_SERVICE" > /dev/null
+ENABLED_SERVICES=("$REQUIRED_SERVICE")
+
+# Optional services
+for SERVICE in "${OPTIONAL_SERVICES[@]}"; do
+    if [ -f "$REPO_DIR/services/$SERVICE" ]; then
+        read -p "==> Do you want to install and enable $SERVICE? [y/N] " response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$SERVICE" | sudo tee "/etc/systemd/system/$SERVICE" > /dev/null
+            ENABLED_SERVICES+=("$SERVICE")
+        else
+            echo "Skipping $SERVICE."
+        fi
+    else
+        echo "Optional $SERVICE not found, skipping."
+    fi
 done
 
-echo "==> Copying udev rules for MIDI devices..."
-for RULES in 11-hookup.rules; do
-    sudo cp "$REPO_DIR/services/$RULES" /etc/udev/rules.d/
-done
+# Always install the target unit if present
+if [ -f "$REPO_DIR/services/$TARGET_SERVICE" ]; then
+    sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$TARGET_SERVICE" | sudo tee "/etc/systemd/system/$TARGET_SERVICE" > /dev/null
+    ENABLED_SERVICES+=("$TARGET_SERVICE")
+fi
 
-# ==== RELOAD/ENABLE ====
-echo "==> Reloading udev rules..."
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-
-echo "==> Reloading systemd..."
-sudo systemctl daemon-reload
-
-echo "==> Enabling services and target for user: $USER_NAME"
-sudo systemctl enable midiup.service audioup.service oledup.service hookup.target
+echo "==> Enabling present services and targets: ${ENABLED_SERVICES[*]}"
+sudo systemctl enable "${ENABLED_SERVICES[@]}"
 
 # ==== ALIASES ====
 echo "==> Creating aliases for readonly.sh toggle..."
