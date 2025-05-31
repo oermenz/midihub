@@ -1,7 +1,7 @@
 [Unit]
 Description=hookup OLED Display Service
 After=network.target
-PartOf=midihub.target
+PartOf=hookup.target
 
 [Service]
 Type=simple
