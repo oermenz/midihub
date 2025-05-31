@@ -1,4 +1,3 @@
-# readonly-setup.sh - toggle Raspberry Pi filesystem between read-only and read-write
 #!/bin/bash
 
 set -e
