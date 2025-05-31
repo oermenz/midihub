@@ -2,4 +2,5 @@ mido
 music21
 Pillow
 luma.oled
+jack-client
 python-rtmidi
