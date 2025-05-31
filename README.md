@@ -1,4 +1,4 @@
-# 🎛️ Midihub — MIDI Router with OLED Display
+# 🎛️ Midihub — MIDI/ADUIO Router with OLED Display (!!WORK IN PROGRESS!!)
 
 Midihub is a lightweight, headless Raspberry Pi project perfect for Dawless setups.
 
