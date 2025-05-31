@@ -6,6 +6,11 @@ import re
 import os
 import sys
 import logging
+import datetime
+
+LOGFILE = "/tmp/midihub_trigger.log"
+with open(LOGFILE, "a") as log:
+    log.write(f"Triggered at {datetime.datetime.now().isoformat()}\n")
 
 LOCKFILE = "/tmp/midihub_debounce.lock"
 DEBOUNCE_SECONDS = 2
