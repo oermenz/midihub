@@ -7,10 +7,10 @@ Midihub is a lightweight, headless Raspberry Pi project perfect for Dawless setu
 ## 📷 Features
 
 - ✅ Auto-connects all MIDI devices (USB, Bluetooth, DIN)
-- ✅ OLED display of connected device names when connected
-- ✅ Displays last received CH + CC + Value + Note + BPM
-- ✅ Designed for 128x64 SSD1306 I²C OLED
-- ✅ Auto-starts on boot via systemd
+- ✅ Displays connected device names when connected on screen
+- ✅ Displays last received Notes, Chords, Channel, CC, Value
+- ✅ Designed for monochrone 128x64 SSD1306 I²C OLED display
+- ✅ Auto-starts on boot via systemd and udev triggers
 
 ---
 
