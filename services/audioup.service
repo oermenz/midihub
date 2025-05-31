@@ -1,5 +1,5 @@
 [Unit]
-Description=hookup OLED Display Service
+Description=HookUp AUDIO Routing Service
 After=network.target
 
 [Service]
