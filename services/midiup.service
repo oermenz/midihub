@@ -1,0 +1,14 @@
+[Unit]
+Description=hookup MIDI Routing Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=__USERNAME__
+WorkingDirectory=/home/__USERNAME__/hookup
+ExecStart=/home/__USERNAME__/hookup/venv/bin/python3 /home/__USERNAME__/hookup/midiup.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
