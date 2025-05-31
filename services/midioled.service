@@ -1,15 +1,15 @@
 [Unit]
-Description=Midihub OLED Display Service
+Description=hookup OLED Display Service
 After=network.target
 PartOf=midihub.target
 
 [Service]
 Type=simple
 User=__USERNAME__
-WorkingDirectory=/home/__USERNAME__/midihub
-ExecStart=/home/__USERNAME__/midihub/venv/bin/python3 /home/__USERNAME__/midihub/midioled.py
+WorkingDirectory=/home/__USERNAME__/hookup
+ExecStart=/home/__USERNAME__/hookup/venv/bin/python3 /home/__USERNAME__/hookup/oledup.py
 Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=midihub.target
+WantedBy=hookup.target
