@@ -61,9 +61,10 @@ state = {
     'toprow_last': {'ch': None, 'cc': None, 'val': None},
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
-    'held_notes': set(),
-    'released_notes': {},
-    'last_latched_notes': set(),
+    # These are for note latching (order-preserving)
+    'held_notes_set': set(),      # for quick lookup
+    'held_notes_list': [],        # for order
+    'last_latched_notes': [],     # latched notes, in order
     'last_latched_time': 0,
     'last_chord_name': '',
     'display_update_event': threading.Event(),
@@ -240,12 +241,12 @@ def update_display():
         state['display_update_event'].clear()
 
         now = time.time()
-        held_notes = state['held_notes']
-        show_latched = len(held_notes) == 0 and state['last_latched_notes']
-        if held_notes:
-            display_notes = list(sorted(held_notes))
+        held_notes_list = state['held_notes_list']
+        show_latched = len(held_notes_list) == 0 and state['last_latched_notes']
+        if held_notes_list:
+            display_notes = list(held_notes_list)
         elif show_latched:
-            display_notes = list(sorted(state['last_latched_notes']))
+            display_notes = list(state['last_latched_notes'])
         else:
             display_notes = []
 
@@ -254,7 +255,7 @@ def update_display():
             display_bubbles.append({
                 'note': n,
                 'name': midi_note_to_name(n),
-                'invert': n in held_notes
+                'invert': n in held_notes_list
             })
 
         with canvas(device) as draw:
@@ -335,14 +336,11 @@ def monitor_midi():
     prev_ch = None
     cc_timestamps = {}
 
-    # For robust latching:
-    # - Track held notes as a set
-    # - On every note_on: add to held_notes
-    # - On every note_off: remove from held_notes
-    # - On the note_off that results in held_notes becoming empty,
-    #     latch a copy of the set as it was *before* the last note was released
-
-    last_held_before_release = set()
+    # Robust, order-preserving latching:
+    # - held_notes_set: for fast lookup
+    # - held_notes_list: for order
+    # - On note_on: add to both if not present
+    # - On note_off: remove from both, and if list is now empty, latch the previous list
 
     while True:
         if check_for_device_update() or not inputs:
@@ -368,18 +366,23 @@ def monitor_midi():
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
                     state['channel'] = msg.channel + 1
-                    state['held_notes'].add(msg.note)
+                    if msg.note not in state['held_notes_set']:
+                        state['held_notes_set'].add(msg.note)
+                        state['held_notes_list'].append(msg.note)
                     midi_event = True
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
                     state['channel'] = msg.channel + 1
-                    # Save copy of held notes before releasing this note
-                    last_held_before_release = set(state['held_notes'])
-                    if msg.note in state['held_notes']:
-                        state['held_notes'].remove(msg.note)
+                    prev_held_notes = list(state['held_notes_list'])
+                    if msg.note in state['held_notes_set']:
+                        state['held_notes_set'].remove(msg.note)
+                        try:
+                            state['held_notes_list'].remove(msg.note)
+                        except ValueError:
+                            pass
                         midi_event = True
-                    # If all notes are now released, latch the last full set
-                    if not state['held_notes'] and last_held_before_release:
-                        state['last_latched_notes'] = set(last_held_before_release)
+                    # If all notes are now released, latch the previous list (order preserved)
+                    if len(state['held_notes_list']) == 0 and prev_held_notes:
+                        state['last_latched_notes'] = prev_held_notes
                         state['last_latched_time'] = now
                         midi_event = True
                 elif msg.type == 'control_change':
