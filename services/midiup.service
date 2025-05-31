@@ -1,6 +1,7 @@
 [Unit]
 Description=hookup MIDI Routing Service
 After=network.target
+PartOf=hookup.target
 
 [Service]
 Type=oneshot
