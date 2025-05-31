@@ -5,7 +5,7 @@ set -e
 # ==== VARIABLES ====
 USER_NAME="$(whoami)"
 USER_HOME="$HOME"
-REPO_DIR="$USER_HOME/midihub"
+REPO_DIR="$USER_HOME/hookup"
 VENV_DIR="$REPO_DIR/venv"
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -37,12 +37,12 @@ fi
 
 # ==== COPY FILES ====
 echo "==> Copying service and target files..."
-for SERVICE in midihub.service midioled.service midihub.target; do
+for SERVICE in midiup.service audioup.service oledup.service hookup.target; do
     sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$SERVICE" | sudo tee "/etc/systemd/system/$SERVICE" > /dev/null
 done
 
 echo "==> Copying udev rules for MIDI devices..."
-for RULES in 11-midihub.rules; do
+for RULES in 11-hookup.rules; do
     sudo cp "$REPO_DIR/services/$RULES" /etc/udev/rules.d/
 done
 
@@ -55,17 +55,17 @@ echo "==> Reloading systemd..."
 sudo systemctl daemon-reload
 
 echo "==> Enabling services and target for user: $USER_NAME"
-sudo systemctl enable midihub.service midioled.service midihub.target
+sudo systemctl enable midiup.service audioup.service oledup.service hookup.target
 
 # ==== ALIASES ====
 echo "==> Creating aliases for readonly.sh toggle..."
 BASHRC="$HOME/.bashrc"
 if ! grep -q 'alias SETRO=' "$BASHRC"; then
-    echo "alias SETRO='sudo ~/midihub/readonly.sh RO'" >> "$BASHRC"
+    echo "alias SETRO='sudo ~/hookup/readonly.sh RO'" >> "$BASHRC"
     echo "Added alias: SETRO (set system to read-only mode)"
 fi
 if ! grep -q 'alias SETRW=' "$BASHRC"; then
-    echo "alias SETRW='sudo ~/midihub/readonly.sh RW'" >> "$BASHRC"
+    echo "alias SETRW='sudo ~/hookup/readonly.sh RW'" >> "$BASHRC"
     echo "Added alias: SETRW (set system to read-write mode)"
 fi
 
