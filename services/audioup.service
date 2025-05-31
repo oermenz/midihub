@@ -1,7 +1,6 @@
 [Unit]
 Description=hookup OLED Display Service
 After=network.target
-PartOf=hookup.target
 
 [Service]
 Type=simple
@@ -12,4 +11,4 @@ Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=hookup.target
