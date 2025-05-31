@@ -3,7 +3,7 @@ Description=HookUp AUDIO Routing Service
 After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=__USERNAME__
 WorkingDirectory=/home/__USERNAME__/hookup
 ExecStart=/home/__USERNAME__/hookup/venv/bin/python3 /home/__USERNAME__/hookup/audioup.py
