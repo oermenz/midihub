@@ -13,7 +13,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # ==== ENABLE i2C + UART ====
-echo "==> Enabeling i2c and UART pins..."
+echo "==> Enabling i2c and UART pins..."
 sudo raspi-config nonint do_i2c 0
 sudo raspi-config nonint do_serial 1
 
