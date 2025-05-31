@@ -12,10 +12,10 @@ LOCKFILE = "/tmp/midihub_debounce.lock"
 DEBOUNCE_SECONDS = 2
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 
+# --- LOGGING (optional, can be removed if not needed) ---
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 
 # ==== MIDI LOGIC (unchanged) ====
-
 def recently_triggered():
     if os.path.exists(LOCKFILE):
         last = os.path.getmtime(LOCKFILE)
@@ -79,7 +79,6 @@ def connect_all_ports(ports):
             subprocess.call(f"aconnect {dst}:0 {src}:0", shell=True)
 
 # ==== AUDIO ROUTING (JACK) ====
-
 def ensure_jack_installed():
     try:
         import jack  # noqa: F401
@@ -156,7 +155,6 @@ def run_audio_autorouter():
     client.close()
 
 # ==== MAIN LOGIC ====
-
 def main():
     recently_triggered()
     disconnect_all_midi()
