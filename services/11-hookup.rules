@@ -1,2 +1,2 @@
-ACTION=="add", SUBSYSTEM=="sound", RUN+="/bin/systemctl start hookup.service"
-ACTION=="remove", SUBSYSTEM=="sound", RUN+="/bin/systemctl start hookup.service"
+ACTION=="add", SUBSYSTEM=="sound", RUN+="/bin/systemctl start hookup.target"
+ACTION=="remove", SUBSYSTEM=="sound", RUN+="/bin/systemctl start hookup.target"
