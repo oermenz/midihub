@@ -3,6 +3,7 @@
 import subprocess
 import datetime
 import logging
+import fcntl
 import time
 import sys
 import re
@@ -93,12 +94,33 @@ def run_audio_autorouter():
 
 # ==== MAIN LOGIC ====
 def main():
+    # ==== DEBOUNCE LOGIC ====
+    now = time.time()
+    try:
+        with open(LOCKFILE, "a+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            f.seek(0)
+            ts = f.read().strip()
+            if ts:
+                try:
+                    last = float(ts)
+                except ValueError:
+                    last = 0
+            else:
+                last = 0
+            if now - last < DEBOUNCE_SECONDS:
+                logging.info("Debounce: called too soon, exiting.")
+                return
+            f.seek(0)
+            f.truncate()
+            f.write(str(now))
+            f.flush()
+    except Exception as e:
+        logging.warning(f"Debounce lock error: {e}")
+
     try:
         run_audio_autorouter()
         logging.info("Audio routed successfully.")
     except Exception as e:
         logging.warning(f"Audio routing failed: {e}")
     sys.exit(0)
-
-if __name__ == "__main__":
-    main()
