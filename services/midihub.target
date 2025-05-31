@@ -1,7 +1,0 @@
-[Unit]
-Description=Midihub Combined Services
-Requires=midihub.service midioled.service
-After=midihub.service midioled.service
-
-[Install]
-WantedBy=multi-user.target
