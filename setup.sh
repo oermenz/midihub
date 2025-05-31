@@ -56,6 +56,7 @@ sudo systemctl daemon-reload
 
 echo "==> Enabling services and target for user: $USER_NAME"
 sudo systemctl enable midihub.service midioled.service midihub.target
+sudo systemctl start midihub.target
 
 # ==== ALIASES ====
 echo "==> Creating aliases for readonly.sh toggle..."
