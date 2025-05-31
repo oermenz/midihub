@@ -21,7 +21,7 @@ DEVICE_SCROLL_START_DELAY = 1
 DEVICE_SCROLL_END_HOLD = 1
 CC_DEBOUNCE_TIME = 0.02
 FLASH_TIME = 0.3
-TRIGGER_FILE = "/tmp/hookup_devices.trigger"
+TRIGGER_FILE = "/tmp/hookup.trigger"
 FONT_DIR = os.path.expanduser("~/hookup/fonts")
 OCTAVE_OFFSET = -1  # Adjust octave offset
 
