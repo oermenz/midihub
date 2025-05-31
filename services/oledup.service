@@ -12,4 +12,4 @@ Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=hookup.target
+WantedBy=multi-user.target
