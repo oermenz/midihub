@@ -41,6 +41,19 @@ for RULES in 11-midihub.rules; do
     sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
 done
 
+# /TMP TO RAM)
+if ! mount | grep -qE '^tmpfs on /tmp '; then
+    echo "Mounting /tmp as tmpfs (RAM disk)..."
+    # Add to /etc/fstab if not already present
+    if ! grep -qE '^tmpfs\s+/tmp\s+tmpfs' /etc/fstab; then
+        echo 'tmpfs   /tmp    tmpfs   defaults,noatime,nosuid,nodev,mode=1777,size=100M  0  0' | sudo tee -a /etc/fstab
+    fi
+    sudo mount -o remount /tmp
+    echo "/tmp is now using RAM (tmpfs)."
+else
+    echo "/tmp is already mounted as tmpfs."
+fi
+
 # RELOAD/ENABLE
 echo "==> Reloading udev rules..."
 sudo udevadm control --reload-rules
