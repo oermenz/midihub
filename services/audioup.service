@@ -1,0 +1,15 @@
+[Unit]
+Description=hookup OLED Display Service
+After=network.target
+PartOf=hookup.target
+
+[Service]
+Type=simple
+User=__USERNAME__
+WorkingDirectory=/home/__USERNAME__/hookup
+ExecStart=/home/__USERNAME__/hookup/venv/bin/python3 /home/__USERNAME__/hookup/audioup.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
