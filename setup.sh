@@ -2,35 +2,36 @@
 
 set -e
 
-# VARIABLES
+# ==== VARIABLES ====
 USER_NAME="oermens"
 USER_HOME="/home/$USER_NAME"
 REPO_DIR="$USER_HOME/midihub"
 VENV_DIR="$REPO_DIR/venv"
 
-# ENABLE i2C + UART
+# ==== ENABLE i2C + UART ====
+echo "==> Enabeling i2c and UART pins..."
 sudo raspi-config nonint do_i2c 0
 sudo raspi-config nonint do_serial 1
 
-# VENV
+# ==== CREATE VENV ====
 echo "==> Creating Python virtual environment..."
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
-# SYSTEM DEPENDENCIES
+# ==== SYSTEM DEPENDENCIES ====
 if [ -f "$REPO_DIR/dependencies.txt" ]; then
     echo "==> Installing system dependencies..."
     sudo apt update
     xargs -a "$REPO_DIR/dependencies.txt" sudo apt install -y
 fi
 
-# PYTHON DEPENDENCIES
+# ==== PYTHON REQUIREMENTS ====
 if [ -f "$REPO_DIR/requirements.txt" ]; then
     echo "==> Installing Python requirements..."
     pip install -r "$REPO_DIR/requirements.txt"
 fi
 
-# COPY FILES
+# ==== COPY FILES ====
 echo "==> Copying service and target files..."
 for SERVICE in midihub.service midioled.service midihub.target; do
     sudo cp "$REPO_DIR/services/$SERVICE" /etc/systemd/system/
@@ -41,7 +42,7 @@ for RULES in 11-midihub.rules; do
     sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
 done
 
-# /TMP TO RAM)
+# ==== TMP TO RAM ====
 if ! mount | grep -qE '^tmpfs on /tmp '; then
     echo "Mounting /tmp as tmpfs (RAM disk)..."
     # Add to /etc/fstab if not already present
@@ -54,7 +55,7 @@ else
     echo "/tmp is already mounted as tmpfs."
 fi
 
-# RELOAD/ENABLE
+# ==== RELOAD/ENABLE ====
 echo "==> Reloading udev rules..."
 sudo udevadm control --reload-rules
 sudo udevadm trigger
@@ -65,7 +66,7 @@ sudo systemctl daemon-reload
 echo "==> Enabling services and target for user: $USER_NAME"
 sudo systemctl enable midihub.service midioled.service midihub.target
 
-# FINISH
+# ==== FINISH ====
 echo
 read -p "==> Setup complete. Reboot now? [y/N] " response
 if [[ "$response" =~ ^[Yy]$ ]]; then
