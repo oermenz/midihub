@@ -2,16 +2,16 @@
 
 import os
 import time
-import threading
 import logging
+import threading
+from music21 import note as m21note, chord as m21chord
 from mido import get_input_names, open_input
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 from PIL import ImageFont
-from music21 import note as m21note, chord as m21chord
 
-# --- CONFIGURATION ---
+# ==== CONFIGURATION ====
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
 MAX_BUBBLES = 5
@@ -28,7 +28,7 @@ OCTAVE_OFFSET = -1  # Adjust octave offset
 # --- LOGGING (optional, can be removed if not needed) ---
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 
-# --- FONT LOADING ---
+# ==== FONT LOADING ====
 def load_fonts():
     fonts = {}
     fonts['label']      = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
@@ -41,7 +41,7 @@ def load_fonts():
 
 fonts = load_fonts()
 
-# --- STATE ---
+# ==== STATE ====
 state = {
     'channel': None,
     'cc': None,
@@ -62,7 +62,7 @@ state = {
     'display_update_event': threading.Event(),
 }
 
-# --- TRIGGER POLLER ---
+# ==== TRIGGER POLLER ====
 trigger_updated = threading.Event()
 
 def poll_trigger_file(poll_interval=1):
@@ -77,15 +77,15 @@ def poll_trigger_file(poll_interval=1):
             pass
         time.sleep(poll_interval)
 
-# --- DEVICE SETUP ---
+# ==== DEVICE SETUP ====
 serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 
-# --- MIDI & CHORD UTILS ---
+# ==== MIDI & CHORD UTILS ====
 def midi_note_to_name(midi_note):
     try:
         n = m21note.Note(midi_note)
-        n.octave += OCTAVE_OFFSET  # Apply offset as committed
+        n.octave += OCTAVE_OFFSET  # Apply offset
         return n.nameWithOctave
     except Exception as e:
         logging.warning(f"Invalid MIDI note {midi_note}: {e}")
@@ -128,7 +128,7 @@ def filter_device_names(devices):
         filtered.append(base)
     return filtered
 
-# --- DISPLAY UTILS ---
+# ==== DISPLAY UTILS ====
 def get_text_size(text, font):
     bbox = font.getbbox(text)
     return (bbox[2] - bbox[0], bbox[3] - bbox[1])
@@ -197,7 +197,7 @@ def draw_bubble_notes(draw, region_y, bubbles, font, region_height):
         draw_centered_text(draw, x, y_centered, bw, bubble_h, b['name'], font, fill=0 if invert else 255)
         x += bw + spacing
 
-# --- MAIN DISPLAY LOOP ---
+# ==== MAIN DISPLAY LOOP ====
 def update_display():
     chord_font = fonts['chord_norm']
     chord_bold_font = fonts['chord_bold']
@@ -285,7 +285,7 @@ def update_display():
                     font_to_use = chord_bold_font if chord_invert else chord_font
                     draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, font_to_use, fill=255)
 
-# --- MIDI HANDLING ---
+# ==== MIDI HANDLING ====
 def debounce_cc_event(cc_number, now, cc_timestamps, debounce_time=CC_DEBOUNCE_TIME):
     last = cc_timestamps.get(cc_number, 0)
     if now - last > debounce_time:
@@ -362,7 +362,7 @@ def monitor_midi():
             state['display_update_event'].set()
         time.sleep(0.005)
 
-# --- MAIN ENTRY POINT ---
+# ==== MAIN ENTRY POINT ====
 if __name__ == "__main__":
     poller_thread = threading.Thread(target=poll_trigger_file, daemon=True)
     poller_thread.start()
