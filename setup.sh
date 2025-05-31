@@ -3,8 +3,8 @@
 set -e
 
 # ==== VARIABLES ====
-USER_NAME="oermens"
-USER_HOME="/home/$USER_NAME"
+USER_NAME="$(whoami)"
+USER_HOME="$HOME"
 REPO_DIR="$USER_HOME/midihub"
 VENV_DIR="$REPO_DIR/venv"
 GREEN='\033[0;32m'
@@ -38,26 +38,13 @@ fi
 # ==== COPY FILES ====
 echo "==> Copying service and target files..."
 for SERVICE in midihub.service midioled.service midihub.target; do
-    sudo cp "$REPO_DIR/services/$SERVICE" /etc/systemd/system/
+    sed "s|__USERNAME__|$USER_NAME|g" "$REPO_DIR/services/$SERVICE" | sudo tee "/etc/systemd/system/$SERVICE" > /dev/null
 done
 
 echo "==> Copying udev rules for MIDI devices..."
 for RULES in 11-midihub.rules; do
     sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
 done
-
-# ==== TMP TO RAM ====
-if ! mount | grep -qE '^tmpfs on /tmp '; then
-    echo "Mounting /tmp as tmpfs (RAM disk)..."
-    # Add to /etc/fstab if not already present
-    if ! grep -qE '^tmpfs\s+/tmp\s+tmpfs' /etc/fstab; then
-        echo 'tmpfs   /tmp    tmpfs   defaults,noatime,nosuid,nodev,mode=1777,size=100M  0  0' | sudo tee -a /etc/fstab
-    fi
-    sudo mount -o remount /tmp
-    echo "/tmp is now using RAM (tmpfs)."
-else
-    echo "/tmp is already mounted as tmpfs."
-fi
 
 # ==== RELOAD/ENABLE ====
 echo "==> Reloading udev rules..."
