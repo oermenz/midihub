@@ -3,6 +3,7 @@
 import os
 import time
 import threading
+import logging
 from mido import get_input_names, open_input
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
@@ -10,6 +11,7 @@ from luma.core.render import canvas
 from PIL import ImageFont
 from music21 import note as m21note, chord as m21chord
 
+# --- CONFIGURATION ---
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
 MAX_BUBBLES = 5
@@ -21,34 +23,31 @@ CC_DEBOUNCE_TIME = 0.02
 FLASH_TIME = 0.3
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 FONT_DIR = os.path.expanduser("~/midihub/fonts")
+OCTAVE_OFFSET = -1  # Adjust octave offset
 
+# --- LOGGING (optional, can be removed if not needed) ---
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
+
+# --- FONT LOADING ---
 def load_fonts():
     fonts = {}
-    try:
-        fonts['label'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
-        fonts['value'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14b.pil"))
-        fonts['chord_norm'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
-        fonts['chord_bold'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14b.pil"))
-        fonts['bubble'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u18b.pil"))
-        # Device font: try ter-u12n.pil (fallback to ter-u14n.pil)
-        small_device_font = os.path.join(FONT_DIR, "ter-u12n.pil")
-        if os.path.isfile(small_device_font):
-            fonts['device'] = ImageFont.load(small_device_font)
-        else:
-            fonts['device'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
-    except Exception as e:
-        raise RuntimeError(f"Failed to load fonts: {e}")
+    fonts['label']      = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
+    fonts['value']      = ImageFont.load(os.path.join(FONT_DIR, "ter-u14b.pil"))
+    fonts['chord_norm'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14n.pil"))
+    fonts['chord_bold'] = ImageFont.load(os.path.join(FONT_DIR, "ter-u14b.pil"))
+    fonts['bubble']     = ImageFont.load(os.path.join(FONT_DIR, "ter-u18b.pil"))
+    fonts['device']     = ImageFont.load(os.path.join(FONT_DIR, "ter-u12n.pil"))
     return fonts
 
 fonts = load_fonts()
 
+# --- STATE ---
 state = {
     'channel': None,
     'cc': None,
     'cc_val': None,
     'show_devices': False,
     'devices': [],
-    'last_device_update': 0,
     'chord_name': '',
     'chord_root': '',
     'chord_quality': '',
@@ -63,15 +62,33 @@ state = {
     'display_update_event': threading.Event(),
 }
 
+# --- TRIGGER POLLER ---
+trigger_updated = threading.Event()
+
+def poll_trigger_file(poll_interval=1):
+    last_mtime = None
+    while True:
+        try:
+            mtime = os.path.getmtime(TRIGGER_FILE)
+            if mtime != last_mtime:
+                last_mtime = mtime
+                trigger_updated.set()
+        except FileNotFoundError:
+            pass
+        time.sleep(poll_interval)
+
+# --- DEVICE SETUP ---
 serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 
+# --- MIDI & CHORD UTILS ---
 def midi_note_to_name(midi_note):
     try:
         n = m21note.Note(midi_note)
-        n.octave += -1  # shift octave down by 1
+        n.octave += OCTAVE_OFFSET  # Apply offset as committed
         return n.nameWithOctave
-    except Exception:
+    except Exception as e:
+        logging.warning(f"Invalid MIDI note {midi_note}: {e}")
         return str(midi_note)
 
 def detect_chord(notes):
@@ -101,16 +118,6 @@ def detect_chord(notes):
     except Exception:
         return "", "", "", "", True
 
-def check_for_device_update():
-    try:
-        mtime = os.path.getmtime(TRIGGER_FILE)
-        if mtime != state['last_device_update']:
-            state['last_device_update'] = mtime
-            return True
-    except FileNotFoundError:
-        pass
-    return False
-
 def filter_device_names(devices):
     filtered = []
     for name in devices:
@@ -121,6 +128,7 @@ def filter_device_names(devices):
         filtered.append(base)
     return filtered
 
+# --- DISPLAY UTILS ---
 def get_text_size(text, font):
     bbox = font.getbbox(text)
     return (bbox[2] - bbox[0], bbox[3] - bbox[1])
@@ -164,7 +172,6 @@ def draw_toprow(draw, y, state):
         label_y = baseline_y + (maxh - lh) // 2
         draw.text((x, label_y), label, font=label_font, fill=255)
         x += lw + padd
-        # New logic: Values are always bold, except briefly normal on change
         is_flash = now < flash_until.get(['ch', 'cc', 'val'][i], 0)
         font_to_use = value_normal_font if is_flash else value_bold_font
         draw_centered_text(draw, x, baseline_y, vw, maxh, value, font_to_use, fill=255)
@@ -190,6 +197,7 @@ def draw_bubble_notes(draw, region_y, bubbles, font, region_height):
         draw_centered_text(draw, x, y_centered, bw, bubble_h, b['name'], font, fill=0 if invert else 255)
         x += bw + spacing
 
+# --- MAIN DISPLAY LOOP ---
 def update_display():
     chord_font = fonts['chord_norm']
     chord_bold_font = fonts['chord_bold']
@@ -277,6 +285,7 @@ def update_display():
                     font_to_use = chord_bold_font if chord_invert else chord_font
                     draw_centered_text(draw, chord_x, chord_fixed_y, w, h, chord_to_display, font_to_use, fill=255)
 
+# --- MIDI HANDLING ---
 def debounce_cc_event(cc_number, now, cc_timestamps, debounce_time=CC_DEBOUNCE_TIME):
     last = cc_timestamps.get(cc_number, 0)
     if now - last > debounce_time:
@@ -292,7 +301,9 @@ def monitor_midi():
     cc_timestamps = {}
 
     while True:
-        if check_for_device_update() or not inputs:
+        # Device polling (1Hz, signaled by trigger_updated event)
+        if trigger_updated.is_set() or not inputs:
+            trigger_updated.clear()
             current_devices = get_input_names()
             filtered_devices = filter_device_names(current_devices)
             if filtered_devices != last_device_list:
@@ -351,7 +362,10 @@ def monitor_midi():
             state['display_update_event'].set()
         time.sleep(0.005)
 
+# --- MAIN ENTRY POINT ---
 if __name__ == "__main__":
+    poller_thread = threading.Thread(target=poll_trigger_file, daemon=True)
+    poller_thread.start()
     display_thread = threading.Thread(target=update_display, daemon=True)
     midi_thread = threading.Thread(target=monitor_midi, daemon=True)
     display_thread.start()
