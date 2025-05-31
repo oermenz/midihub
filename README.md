@@ -1,5 +1,3 @@
-# !! WORK IN PROGRESS !! USE ON OWN RISK !!
-
 # 🎛️ Midihub — MIDI/AUDIO Router with OLED Display 
 
 Midihub is a lightweight, headless Raspberry Pi project perfect for Dawless setups.
@@ -24,8 +22,6 @@ Midihub is a lightweight, headless Raspberry Pi project perfect for Dawless setu
 ---
 
 ## 🚀 Setup Instructions
-
-***IMPORTANT: Use "oermens" as username or replace in the services files and setup script (user=XXX)***
 
 1. **Update and install**
 
