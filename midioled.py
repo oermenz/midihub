@@ -38,6 +38,7 @@ DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
 CC_DEBOUNCE_TIME = 0.02        # ms debounce for CC values
 FLASH_TIME = 0.3               # ms flashtime for new inputs
 MAX_DEVICE_LINES = 5
+MAX_BUBBLES = 5                # maximum bubbles to display
 
 state = {
     'channel': None,
@@ -61,10 +62,8 @@ state = {
     'toprow_last': {'ch': None, 'cc': None, 'val': None},
     'last_chord_flash_until': 0,
     'device_scroll_time': 0,
-    # These are for note latching (order-preserving)
-    'held_notes_set': set(),      # for quick lookup
-    'held_notes_list': [],        # for order
-    'last_latched_notes': [],     # latched notes, in order
+    'held_notes': set(),         # held MIDI notes (integers)
+    'latched_notes': set(),      # latched/released notes (integers)
     'last_latched_time': 0,
     'last_chord_name': '',
     'display_update_event': threading.Event(),
@@ -241,21 +240,19 @@ def update_display():
         state['display_update_event'].clear()
 
         now = time.time()
-        held_notes_list = state['held_notes_list']
-        show_latched = len(held_notes_list) == 0 and state['last_latched_notes']
-        if held_notes_list:
-            display_notes = list(held_notes_list)
-        elif show_latched:
-            display_notes = list(state['last_latched_notes'])
-        else:
-            display_notes = []
-
+        # Combine bubbles: held (inverted), latched (uninverted)
+        held = set(state['held_notes'])
+        latched = set(state['latched_notes'])
+        # Show up to MAX_BUBBLES, sorted low-to-high
+        all_notes = list(held | latched)
+        all_notes = sorted(all_notes)[:MAX_BUBBLES]
+        # Make sure to keep exactly which are inverted (held) and which are uninverted (latched)
         display_bubbles = []
-        for n in display_notes:
+        for n in all_notes:
             display_bubbles.append({
                 'note': n,
                 'name': midi_note_to_name(n),
-                'invert': n in held_notes_list
+                'invert': n in held
             })
 
         with canvas(device) as draw:
@@ -299,8 +296,10 @@ def update_display():
                 # Chord name display logic
                 chord_to_display = ""
                 chord_invert = (now < state.get('last_chord_flash_until', 0))
-                if display_notes and len(display_notes) >= 3:
-                    chord_str, root, quality, bass, unknown = detect_chord(display_notes)
+                # Chord detection only for currently held notes (if >= 3 notes)
+                chord_notes = sorted(list(held))[:MAX_BUBBLES]
+                if chord_notes and len(chord_notes) >= 3:
+                    chord_str, root, quality, bass, unknown = detect_chord(chord_notes)
                     if not unknown and chord_str:
                         state['chord_name'] = chord_str
                         state['chord_root'] = root
@@ -336,12 +335,6 @@ def monitor_midi():
     prev_ch = None
     cc_timestamps = {}
 
-    # Robust, order-preserving latching:
-    # - held_notes_set: for fast lookup
-    # - held_notes_list: for order
-    # - On note_on: add to both if not present
-    # - On note_off: remove from both, and if list is now empty, latch the previous list
-
     while True:
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
@@ -362,28 +355,27 @@ def monitor_midi():
 
         now = time.time()
         midi_event = False
+        # For up to MAX_BUBBLES, track held/latched notes
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
                     state['channel'] = msg.channel + 1
-                    if msg.note not in state['held_notes_set']:
-                        state['held_notes_set'].add(msg.note)
-                        state['held_notes_list'].append(msg.note)
+                    # Any new keypress resets latched notes
+                    if state['latched_notes']:
+                        state['latched_notes'] = set()
+                    if len(state['held_notes']) < MAX_BUBBLES:
+                        state['held_notes'].add(msg.note)
                     midi_event = True
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
                     state['channel'] = msg.channel + 1
-                    prev_held_notes = list(state['held_notes_list'])
-                    if msg.note in state['held_notes_set']:
-                        state['held_notes_set'].remove(msg.note)
-                        try:
-                            state['held_notes_list'].remove(msg.note)
-                        except ValueError:
-                            pass
-                        midi_event = True
-                    # If all notes are now released, latch the previous list (order preserved)
-                    if len(state['held_notes_list']) == 0 and prev_held_notes:
-                        state['last_latched_notes'] = prev_held_notes
-                        state['last_latched_time'] = now
+                    if msg.note in state['held_notes']:
+                        # Only latch if we were at max bubbles before release
+                        if len(state['held_notes']) == MAX_BUBBLES:
+                            state['latched_notes'].add(msg.note)
+                            # Limit latched notes to MAX_BUBBLES
+                            if len(state['latched_notes']) > MAX_BUBBLES:
+                                state['latched_notes'] = set(sorted(state['latched_notes'])[:MAX_BUBBLES])
+                        state['held_notes'].remove(msg.note)
                         midi_event = True
                 elif msg.type == 'control_change':
                     if debounce_cc_event(msg.control, now, cc_timestamps):
