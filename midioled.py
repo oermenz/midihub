@@ -31,13 +31,11 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
-
-DEVICE_DISPLAY_TIME = 6        # seconds device listing
+DEVICE_DISPLAY_TIME = 6        # seconds for device list
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
-CHORD_RELEASE_WINDOW = 0.2     # 200ms window for chord latching
-CC_DEBOUNCE_TIME = 0.02        # 20ms debounce for CC values
-FLASH_TIME = 0.3               # 30ms flash for changes
+CC_DEBOUNCE_TIME = 0.02        # ms debounce for CC values
+FLASH_TIME = 0.3               # ms flashtime for new inputs
 MAX_DEVICE_LINES = 5
 
 state = {
@@ -68,10 +66,6 @@ state = {
     'last_latched_time': 0,
     'last_chord_name': '',
     'display_update_event': threading.Event(),
-    # Chord release window state
-    'chord_release_pending': False,
-    'chord_release_start_time': 0,
-    'chord_release_notes': set(),
 }
 
 serial = i2c(port=1, address=0x3C)
@@ -340,6 +334,15 @@ def monitor_midi():
     prev_ch = None
     cc_timestamps = {}
 
+    # For robust latching:
+    # - Track held notes as a set
+    # - On every note_on: add to held_notes
+    # - On every note_off: remove from held_notes
+    # - On the note_off that results in held_notes becoming empty,
+    #     latch a copy of the set as it was *before* the last note was released
+
+    last_held_before_release = set()
+
     while True:
         if check_for_device_update() or not inputs:
             current_devices = get_input_names()
@@ -363,29 +366,22 @@ def monitor_midi():
         for port in inputs:
             for msg in port.iter_pending():
                 if msg.type == 'note_on' and msg.velocity > 0:
-                    # Removed debounce for note events: Always process
                     state['channel'] = msg.channel + 1
                     state['held_notes'].add(msg.note)
-                    state['released_notes'].pop(msg.note, None)
                     midi_event = True
-                    if state['chord_release_pending']:
-                        state['chord_release_pending'] = False
                 elif (msg.type == 'note_off') or (msg.type == 'note_on' and msg.velocity == 0):
-                    # Removed debounce for note events: Always process
                     state['channel'] = msg.channel + 1
+                    # Save copy of held notes before releasing this note
+                    last_held_before_release = set(state['held_notes'])
                     if msg.note in state['held_notes']:
                         state['held_notes'].remove(msg.note)
-                    state['released_notes'][msg.note] = now
-                    midi_event = True
-                    if not state['chord_release_pending'] and len(state['held_notes']) > 0:
-                        state['chord_release_pending'] = True
-                        state['chord_release_start_time'] = now
-                        state['chord_release_notes'] = set(state['held_notes'])
-                    elif not state['chord_release_pending'] and len(state['held_notes']) == 0:
-                        state['last_latched_notes'] = set([msg.note])
+                        midi_event = True
+                    # If all notes are now released, latch the last full set
+                    if not state['held_notes'] and last_held_before_release:
+                        state['last_latched_notes'] = set(last_held_before_release)
                         state['last_latched_time'] = now
+                        midi_event = True
                 elif msg.type == 'control_change':
-                    # Add debounce for CC values
                     if debounce_cc_event(msg.control, now, cc_timestamps):
                         state['channel'] = msg.channel + 1
                         if state['cc'] != msg.control:
@@ -398,15 +394,6 @@ def monitor_midi():
         if prev_ch != state['channel']:
             state['toprow_values_flash_until']['ch'] = now + FLASH_TIME
         prev_ch = state['channel']
-
-        # Handle chord release window (now 200ms)
-        if state['chord_release_pending']:
-            if now - state['chord_release_start_time'] >= CHORD_RELEASE_WINDOW or len(state['held_notes']) == 0:
-                state['last_latched_notes'] = set(state['chord_release_notes'])
-                state['last_latched_time'] = now
-                state['chord_release_pending'] = False
-                state['chord_release_notes'] = set()
-                state['display_update_event'].set()
 
         if midi_event:
             state['display_update_event'].set()
