@@ -69,6 +69,7 @@ device = ssd1306(serial)
 def midi_note_to_name(midi_note):
     try:
         n = m21note.Note(midi_note)
+        n.octave += -1  # shift octave down by 1
         return n.nameWithOctave
     except Exception:
         return str(midi_note)
