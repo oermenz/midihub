@@ -1,7 +1,6 @@
 [Unit]
 Description=hookup MIDI Routing Service
-After=network.target
-PartOf=hookup.target
+After=network.targett
 
 [Service]
 Type=oneshot
@@ -12,4 +11,4 @@ Restart=on-failure
 RestartSec=5s
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=hookup.target
