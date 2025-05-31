@@ -5,9 +5,9 @@ PartOf=midihub.target
 
 [Service]
 Type=simple
-User=oermens
-WorkingDirectory=/home/oermens/midihub
-ExecStart=/home/oermens/midihub/venv/bin/python3 /home/oermens/midihub/midioled.py
+User=__USERNAME__
+WorkingDirectory=/home/__USERNAME__/midihub
+ExecStart=/home/__USERNAME__/midihub/venv/bin/python3 /home/__USERNAME__/midihub/midioled.py
 Restart=on-failure
 RestartSec=5s
 
