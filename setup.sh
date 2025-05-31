@@ -7,6 +7,10 @@ USER_NAME="oermens"
 USER_HOME="/home/$USER_NAME"
 REPO_DIR="$USER_HOME/midihub"
 VENV_DIR="$REPO_DIR/venv"
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+RESET='\033[0m'
 
 # ==== ENABLE i2C + UART ====
 echo "==> Enabeling i2c and UART pins..."
@@ -66,9 +70,27 @@ sudo systemctl daemon-reload
 echo "==> Enabling services and target for user: $USER_NAME"
 sudo systemctl enable midihub.service midioled.service midihub.target
 
+# ==== ALIASES ====
+echo "==> Creating aliases for readonly.sh toggle..."
+BASHRC="$HOME/.bashrc"
+if ! grep -q 'alias SETRO=' "$BASHRC"; then
+    echo "alias SETRO='sudo ~/midihub/readonly.sh RO'" >> "$BASHRC"
+    echo "Added alias: SETRO (set system to read-only mode)"
+fi
+if ! grep -q 'alias SETRW=' "$BASHRC"; then
+    echo "alias SETRW='sudo ~/midihub/readonly.sh RW'" >> "$BASHRC"
+    echo "Added alias: SETRW (set system to read-write mode)"
+fi
+
+source "$BASHRC"
+
+echo
+echo -e "==> You can now use '${BOLD}${GREEN}SETRO${RESET}' to set the system to read-only mode and '${BOLD}${RED}SETRW${RESET}' to revert to read-write mode."
+echo
+
 # ==== FINISH ====
 echo
-read -p "==> Setup complete. Reboot now? [y/N] " response
+read -p "==> Setup complete. Reboot required. Reboot now? [y/N] " response
 if [[ "$response" =~ ^[Yy]$ ]]; then
     echo "Rebooting..."
     sudo reboot now
