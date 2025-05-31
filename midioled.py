@@ -31,6 +31,7 @@ def load_fonts():
 fonts = load_fonts()
 
 TRIGGER_FILE = "/tmp/midihub_devices.trigger"
+
 DEVICE_DISPLAY_TIME = 6        # seconds for device list
 DEVICE_SCROLL_START_DELAY = 1  # seconds before scroll starts
 DEVICE_SCROLL_END_HOLD = 1     # seconds to hold last page
