@@ -43,7 +43,7 @@ done
 
 echo "==> Copying udev rules for MIDI devices..."
 for RULES in 11-midihub.rules; do
-    sudo cp "$REPO_DIR/$RULES" /etc/udev/rules.d/
+    sudo cp "$REPO_DIR/services/$RULES" /etc/udev/rules.d/
 done
 
 # ==== RELOAD/ENABLE ====
