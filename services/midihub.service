@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=oermens
-WorkingDirectory=/home/oermens/midihub
-ExecStart=/home/oermens/midihub/venv/bin/python3 /home/oermens/midihub/midihub.py
+User=__USERNAME__
+WorkingDirectory=/home/__USERNAME__/midihub
+ExecStart=/home/__USERNAME__/midihub/venv/bin/python3 /home/__USERNAME__/midihub/midihub.py
 Restart=on-failure
 RestartSec=5s
 
