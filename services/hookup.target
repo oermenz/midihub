@@ -1,6 +1,7 @@
 [Unit]
 Description=hookup Combined Services
-Requires=midiup.service oledup.service
+Requires=midiup.service
+Wants=oledup.service
 After=midiup.service oledup.service
 
 [Install]
