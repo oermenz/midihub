@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
 import subprocess
-import datetime
 import logging
 import fcntl
 import time
 import sys
-import re
-import os
 
 # ==== CONFIGURATION ====
 LOCKFILE = "/tmp/audioup_debounce.lock"
