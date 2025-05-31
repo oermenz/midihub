@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 
 import subprocess
+import datetime
+import logging
 import time
+import sys
 import re
 import os
-import sys
-import logging
-import datetime
 
+# ==== CONFIGURATION ====
+TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 LOCKFILE = "/tmp/midihub_debounce.lock"
 DEBOUNCE_SECONDS = 2
-TRIGGER_FILE = "/tmp/midihub_devices.trigger"
 
 # --- LOGGING (optional, can be removed if not needed) ---
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 
-# ==== MIDI LOGIC (unchanged) ====
+# ==== MIDI LOGIC ====
 def recently_triggered():
     if os.path.exists(LOCKFILE):
         last = os.path.getmtime(LOCKFILE)
